@@ -1,3 +1,5 @@
+from django.db import transaction
+from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -9,6 +11,7 @@ import logging
 import random
 from . import notifications
 from drf_spectacular.utils import extend_schema, OpenApiExample
+logger = logging.getLogger(__name__)
 
 
 # Create your views here.
@@ -94,3 +97,53 @@ class OTPRegisterView(APIView):
             )
 
 
+@extend_schema(
+    summary="Verify OTP code and get authentication token",
+    description="Verifies the OTP and if valid, returns the user's authentication token.",
+    request=serializers.OTPVerifySerializer,
+    responses={
+        200: serializers.AuthTokenSerializer,
+        400: {"description": "Invalid input, code expired, or user not found"},
+        500: {"description": "Internal server error"},
+    },
+    examples=[
+        OpenApiExample(
+            'Login Success',
+            summary='Successful verification returns a token',
+            value={'token': '9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b'},
+            response_only=True,
+            status_codes=['200']
+        ),
+    ]
+)
+class OTPVerifyAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = serializers.OTPVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        phone_number = serializer.validated_data['phone_number']
+        code = serializer.validated_data['code']
+
+        user = get_object_or_404(models.User, username=phone_number)
+        code_enter = get_object_or_404(models.OTPCode, user=user, code=code)
+
+        if not code_enter.is_valid():
+            return Response({"error": "کد وارد شده منقضی شده است."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with transaction.atomic():
+                token, _ = Token.objects.get_or_create(user=user)
+                code_enter.delete()
+                profile, created = models.Profile.objects.get_or_create(user=user)
+                is_new_user = profile.is_new_user
+                if created:
+                    profile.is_new_user = is_new_user
+                    profile.save()
+        except Exception as e:
+            logger.error(f"Error during OTP verification transaction for {user.username}: {e}", exc_info=True)
+            return Response({"error": "خطای سیستمی در پردازش احراز هویت."},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({"token": token.key}, status=status.HTTP_200_OK)
