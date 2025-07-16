@@ -11,6 +11,7 @@ import logging
 import random
 from . import notifications
 from drf_spectacular.utils import extend_schema, OpenApiExample
+from rest_framework.permissions import IsAuthenticated
 logger = logging.getLogger(__name__)
 
 
@@ -147,3 +148,23 @@ class OTPVerifyAPIView(APIView):
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({"token": token.key}, status=status.HTTP_200_OK)
+
+
+class Dashboard(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        profile = get_object_or_404(models.Profile, user=user)
+        return Response({"phone": profile.phone, "full_name": profile.full_name})
+
+    def put(self, request):
+        user = request.user
+        profile = get_object_or_404(models.Profile, user=user)
+
+        serializer = serializers.ProfileSerializer(data=request.data, instance=profile)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
