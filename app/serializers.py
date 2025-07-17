@@ -28,3 +28,4 @@ class OTPVerifySerializer(serializers.Serializer):
 
 class AuthTokenSerializer(serializers.Serializer):
     token = serializers.CharField(read_only=True)
+
