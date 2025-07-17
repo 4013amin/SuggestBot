@@ -12,6 +12,8 @@ import random
 from . import notifications
 from drf_spectacular.utils import extend_schema, OpenApiExample
 from rest_framework.permissions import IsAuthenticated
+from . import services
+
 logger = logging.getLogger(__name__)
 
 
@@ -167,4 +169,24 @@ class Dashboard(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
+
+class TrackEventAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = serializers.UserEventSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"status": "رویداد با موفقیت ثبت شد."}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ProductRecommendationAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, product_source_id):
+        product = get_object_or_404(models.Product, source_id=product_source_id)
+        recommended_products = services.find_related_products(product.id, limit=5)
+        serializer = serializers.ProductRecommendationSerializer(recommended_products, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

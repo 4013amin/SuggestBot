@@ -1,4 +1,6 @@
-from . import models , Count
+from django.db.models import Count
+from . import models
+
 
 #  """
 #     محصولاتی را پیدا می‌کند که توسط کاربرانی که محصول ورودی را دیده‌اند،
