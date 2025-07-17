@@ -1,5 +1,6 @@
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from requests import get
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -212,6 +213,54 @@ class ProductRecommendationAPIView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+
+@extend_schema(
+    summary="دریافت و ثبت محصولات",
+    description="""
+این اندپوینت برای دریافت لیست همه محصولات (GET) و ثبت محصول جدید (POST) استفاده می‌شود.
+
+- **GET:** لیست کامل محصولات را برمی‌گرداند.
+- **POST:** یک محصول جدید با اطلاعات ارسال‌شده ایجاد می‌کند.
+""",
+    responses={
+        200: OpenApiExample(
+            'لیست محصولات',
+            value=[
+                {"id": 1, "name": "محصول ۱", "price": 120000, "source_id": "abc123"},
+                {"id": 2, "name": "محصول ۲", "price": 95000, "source_id": "def456"},
+            ],
+            response_only=True,
+            status_codes=['200']
+        ),
+        201: OpenApiExample(
+            'ثبت موفق محصول',
+            value={"id": 3, "name": "محصول جدید", "price": 100000, "source_id": "xyz789"},
+            response_only=True,
+            status_codes=['201']
+        ),
+        400: OpenApiExample(
+            'خطای اعتبارسنجی',
+            value={"name": ["این فیلد الزامی است."]},
+            response_only=True,
+            status_codes=['400']
+        ),
+    },
+    request=serializers.ProductSerializer,
+)
+class Product_all(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        products = models.Product.objects.all()
+        serializer = serializers.ProductSerializer(products, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def post(self , request):
+        serializer = serializers.ProductSerializer(data = request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 #Templates
 def product_list_view(request):

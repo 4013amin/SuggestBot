@@ -54,3 +54,10 @@ class UserEventSerializer(serializers.ModelSerializer):
 
         event = models.UserEvent.objects.create(product=product, **validated_data)
         return event
+
+
+
+class ProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Product
+        fields = '__all__'
