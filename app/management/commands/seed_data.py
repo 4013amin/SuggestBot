@@ -19,11 +19,12 @@ class Command(BaseCommand):
         cat1 = Category.objects.create(name="پوشاک مردانه", source_id="wc_cat_1")
         cat2 = Category.objects.create(name="کالای دیجیتال", source_id="wc_cat_2")
 
-        p1 = Product.objects.create(name="تیشرت مردانه", price=150000, category=cat1, source_id="wp_101")
-        p2 = Product.objects.create(name="تیشرت مردانه", price=150000, category=cat1, source_id="wp_102")
-        p3 = Product.objects.create(name="تیشرت مردانه", price=150000, category=cat1, source_id="wp_103")
-        p4 = Product.objects.create(name="تیشرت مردانه", price=150000, category=cat2, source_id="wp_104")
-        p5 = Product.objects.create(name="تیشرت مردانه", price=150000, category=cat2, source_id="wp_105")
+        p1 = Product.objects.create(name="تیشرت مردانه نخی", price=150000, category=cat1, source_id="wp_101")
+        p2 = Product.objects.create(name="شلوار جین آبی", price=450000, category=cat1, source_id="wp_102")
+        p3 = Product.objects.create(name="کفش ورزشی رانینگ", price=800000, category=cat1, source_id="wp_103")
+        p4 = Product.objects.create(name="موس بی‌سیم لاجیتک", price=250000, category=cat2,
+                                    source_id="wp_201")
+        p5 = Product.objects.create(name="کیبورد گیمینگ مکانیکال", price=1200000, category=cat2, source_id="wp_202")
 
         products = [p1, p2, p3, p4, p5]
         self.stdout.write(self.style.SUCCESS(f"{len(products)} محصول ایجاد شد."))

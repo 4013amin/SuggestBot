@@ -171,6 +171,25 @@ class Dashboard(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+        summary="ثبت رویداد کاربر",
+        description="این متد برای ثبت رویدادهای کاربر (مانند مشاهده محصول، افزودن به سبد خرید یا خرید) استفاده می‌شود. اطلاعات رویداد باید در بدنه درخواست ارسال شود.",
+        request=serializers.UserEventSerializer,
+        responses={
+            201: OpenApiExample(
+                'ثبت موفق',
+                value={"status": "رویداد با موفقیت ثبت شد."},
+                response_only=True,
+                status_codes=['201']
+            ),
+            400: OpenApiExample(
+                'خطای اعتبارسنجی',
+                value={"event_type": ["این فیلد الزامی است."]},
+                response_only=True,
+                status_codes=['400']
+            ),
+        }
+    )
 class TrackEventAPIView(APIView):
     permission_classes = [AllowAny]
 

@@ -44,13 +44,13 @@ class UserEventSerializer(serializers.ModelSerializer):
         model = models.UserEvent
         fields = ['session_id', 'event_type', 'product_source_id', 'extra_data']
 
-        def create(self, validated_data):
-            product_source_id = validated_data.pop('product_source_id')
+    def create(self, validated_data):
+        product_source_id = validated_data.pop('product_source_id')
 
-            try:
-                product = models.Product.objects.get(id=product_source_id)
-            except models.Product.DoesNotExist:
-                raise serializers.ValidationError({"product_source_id": "Product not found."})
+        try:
+            product = models.Product.objects.get(source_id=product_source_id)
+        except models.Product.DoesNotExist:
+            raise serializers.ValidationError({"product_source_id": "Product not found."})
 
-            event = models.UserEvent.objects.create(product=product, **validated_data)
-            return event
+        event = models.UserEvent.objects.create(product=product, **validated_data)
+        return event
