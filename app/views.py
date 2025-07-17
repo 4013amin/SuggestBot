@@ -13,6 +13,7 @@ from . import notifications
 from drf_spectacular.utils import extend_schema, OpenApiExample
 from rest_framework.permissions import IsAuthenticated
 from . import services
+from django.shortcuts import render, get_object_or_404
 
 logger = logging.getLogger(__name__)
 
@@ -209,3 +210,21 @@ class ProductRecommendationAPIView(APIView):
         recommended_products = services.find_related_products(product.id, limit=5)
         serializer = serializers.ProductRecommendationSerializer(recommended_products, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+
+#Templates
+def product_list_view(request):
+    products = models.Product.objects.all() 
+    context = {
+        'products': products
+    }
+    return render(request, 'index.html', context) 
+
+
+def product_detail_view(request, product_source_id):
+    product = get_object_or_404(models.Product, source_id=product_source_id) 
+    context = {
+        'product': product
+    }
+    return render(request, 'product_detail.html', context)
