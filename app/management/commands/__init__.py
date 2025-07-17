@@ -27,3 +27,15 @@ class Command(BaseCommand):
 
         products = [p1, p2, p3, p4, p5]
         self.stdout.write(self.style.SUCCESS(f"{len(products)} محصول ایجاد شد."))
+
+        self.stdout.write("شبیه سازی رفتار کاربران")
+
+        # کاربران ۱
+        UserEvent.objects.create(session_id="session_user_1", event_type='VIEW', product=p1)
+        UserEvent.objects.create(session_id="session_user_1", event_type='VIEW', product=p2)
+        UserEvent.objects.create(session_id="session_user_1", event_type='VIEW', product=p3)
+
+        # کاربران ۲
+        UserEvent.objects.create(session_id="session_user_2", event_type='VIEW', product=p1)
+        UserEvent.objects.create(session_id="session_user_2", event_type='VIEW', product=p2)
+        UserEvent.objects.create(session_id="session_user_2", event_type='VIEW', product=p3)
