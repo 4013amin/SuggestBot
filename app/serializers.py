@@ -56,8 +56,15 @@ class UserEventSerializer(serializers.ModelSerializer):
         return event
 
 
-
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Product
+        fields = '__all__'
+
+
+class DashboardSerializer(serializers.ModelSerializer):
+    is_active = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = models.Profile
         fields = '__all__'

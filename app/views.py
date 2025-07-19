@@ -174,24 +174,24 @@ class Dashboard(APIView):
 
 
 @extend_schema(
-        summary="ثبت رویداد کاربر",
-        description="این متد برای ثبت رویدادهای کاربر (مانند مشاهده محصول، افزودن به سبد خرید یا خرید) استفاده می‌شود. اطلاعات رویداد باید در بدنه درخواست ارسال شود.",
-        request=serializers.UserEventSerializer,
-        responses={
-            201: OpenApiExample(
-                'ثبت موفق',
-                value={"status": "رویداد با موفقیت ثبت شد."},
-                response_only=True,
-                status_codes=['201']
-            ),
-            400: OpenApiExample(
-                'خطای اعتبارسنجی',
-                value={"event_type": ["این فیلد الزامی است."]},
-                response_only=True,
-                status_codes=['400']
-            ),
-        }
-    )
+    summary="ثبت رویداد کاربر",
+    description="این متد برای ثبت رویدادهای کاربر (مانند مشاهده محصول، افزودن به سبد خرید یا خرید) استفاده می‌شود. اطلاعات رویداد باید در بدنه درخواست ارسال شود.",
+    request=serializers.UserEventSerializer,
+    responses={
+        201: OpenApiExample(
+            'ثبت موفق',
+            value={"status": "رویداد با موفقیت ثبت شد."},
+            response_only=True,
+            status_codes=['201']
+        ),
+        400: OpenApiExample(
+            'خطای اعتبارسنجی',
+            value={"event_type": ["این فیلد الزامی است."]},
+            response_only=True,
+            status_codes=['400']
+        ),
+    }
+)
 class TrackEventAPIView(APIView):
     permission_classes = [AllowAny]
 
@@ -211,7 +211,6 @@ class ProductRecommendationAPIView(APIView):
         recommended_products = services.find_related_products(product.id, limit=5)
         serializer = serializers.ProductRecommendationSerializer(recommended_products, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-
 
 
 @extend_schema(
@@ -254,26 +253,51 @@ class Product_all(APIView):
         products = models.Product.objects.all()
         serializer = serializers.ProductSerializer(products, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
-    def post(self , request):
-        serializer = serializers.ProductSerializer(data = request.data)
+
+    def post(self, request):
+        serializer = serializers.ProductSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-#Templates
+
+# Templates
 def product_list_view(request):
-    products = models.Product.objects.all() 
+    products = models.Product.objects.all()
     context = {
         'products': products
     }
-    return render(request, 'index.html', context) 
+    return render(request, 'index.html', context)
 
 
 def product_detail_view(request, product_source_id):
-    product = get_object_or_404(models.Product, source_id=product_source_id) 
+    product = get_object_or_404(models.Product, source_id=product_source_id)
     context = {
         'product': product
     }
     return render(request, 'product_detail.html', context)
+
+
+class Dashboard(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        user = request.user
+        profile = get_object_or_404(models.Profile, user=user)
+        serializer = serializers.DashboardSerializer(profile, many=False)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = serializers.DashboardSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def put(self, request):
+        serializer = serializers.DashboardSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
