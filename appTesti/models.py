@@ -1,5 +1,5 @@
 import uuid
-
+from django.utils import timezone
 from django.contrib.auth.models import User
 from django.db import models
 from django.conf import settings
@@ -7,6 +7,18 @@ from pip._vendor.rich.markup import Tag
 
 
 # Create your models here.
+
+class OTPCode(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otp_codes')
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_valid(self):
+        return (timezone.now() - self.created_at).total_seconds() < 120
+
+    def __str__(self):
+        return f"OTP for {self.user.username} - {self.code}"
+
 
 class ClientProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='client_profile')
