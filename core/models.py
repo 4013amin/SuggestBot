@@ -63,4 +63,14 @@ class Order(models.Model):
         verbose_name_plural = _("سفارشات")
         ordering = ['-created_at_in_wc']
 
-class
+
+class OrderItem(models.Model):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
+    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, related_name='order_items')
+    woocommerce_product_id = models.PositiveIntegerField()
+    quantity = models.PositiveIntegerField(_("تعداد"))
+    price_at_purchase = models.DecimalField(_("قیمت در زمان خرید"), max_digits=12, decimal_places=2)
+
+    class Meta:
+        verbose_name = _("آیتم سفارش")
+        verbose_name_plural = _("آیتم‌های سفارش")
