@@ -11,6 +11,7 @@ class SubscriptionPlan(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="قیمت (تومان)")
     duration_days = models.IntegerField(verbose_name="مدت زمان (روز)")
     is_public = models.BooleanField(default=True, help_text="آیا این طرح برای خرید در دسترس کاربران باشد؟")
+    is_trial = models.BooleanField(default=False, help_text="آیا این یک پلن آزمایشی است که فقط یکبار به کاربر داده می‌شود؟")
 
     def __str__(self):
         return self.name

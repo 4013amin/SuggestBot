@@ -15,7 +15,7 @@ from rest_framework.authtoken.models import Token
 from datetime import timedelta
 from django.utils import timezone
 
-from .serializers import SubscriptionPlanSerializer, UserSubscriptionSerializer
+from .serializers import SubscriptionPlanSerializer, UserSubscriptionSerializer, BuySubscriptionSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -69,16 +69,17 @@ class OTPRegisterView(APIView):
             user.save()
 
             try:
-                trial_plan = SubscriptionPlan.objects.get(name='طرح رایگان یک ماهه')
-                now = timezone.now()
-                UserSubscription.objects.create(
-                    user=user,
-                    plan=trial_plan,
-                    start_date=now,
-                    end_date=now + timedelta(days=trial_plan.duration_days)
-                )
+                trial_plan = SubscriptionPlan.objects.get(is_trial=True)
+                if not UserSubscription.objects.filter(user=user, plan__is_trial=True).exists():
+                    now = timezone.now()
+                    UserSubscription.objects.create(
+                        user=user,
+                        plan=trial_plan,
+                        start_date=now,
+                        end_date=now + timedelta(days=trial_plan.duration_days)
+                    )
             except SubscriptionPlan.DoesNotExist:
-                logger.error("پلن آزمایشی پیدا نشد!")
+                logger.error("پلن آزمایشی (trial plan) در سیستم تعریف نشده است!")
 
         code = str(random.randint(100000, 999999))
         OTPCode.objects.filter(user=user).delete()
@@ -182,15 +183,16 @@ class MySubscriptionView(generics.RetrieveAPIView):
     summary="خرید یا تمدید پلن اشتراک",
     description="""
     این endpoint برای خرید یا تمدید پلن اشتراک استفاده می‌شود.
-    - دریافت شناسه پلن مورد نظر.
-    - بررسی وجود پلن و عمومی بودن آن.
-    - ایجاد یا بروزرسانی اشتراک کاربر با پلن انتخاب شده.
-    - بازگرداندن جزئیات اشتراک جدید شامل نام پلن و بازه زمانی.
+    - کاربر فقط باید آیدی پلن (`plan_id`) را ارسال کند.
+    - سرور بررسی می‌کند که پلن وجود دارد و عمومی است.
+    - اگر کاربر قبلاً اشتراک داشته باشد، تمدید می‌شود.
+    - اگر نداشته باشد، اشتراک جدید ایجاد می‌شود.
+    - پاسخ شامل پیام موفقیت، تاریخ شروع و پایان و نام پلن است.
     """,
-    request=serializers.UserSubscription,
+    request=BuySubscriptionSerializer,
     responses={
         200: {
-            'message': 'متنی در مورد موفقیت خرید',
+            'message': 'پلن ... با موفقیت برای شما فعال شد.',
             'start_date': 'تاریخ شروع اشتراک',
             'end_date': 'تاریخ پایان اشتراک',
             'plan': 'نام پلن خریداری شده'
@@ -203,23 +205,29 @@ class BuySubscriptionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        plan_id = request.data.get('plan_id')
-        if not plan_id:
-            return Response({'error': 'آیدی پلن ارسال نشده است.'}, status=400)
+        serializer = BuySubscriptionSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+
+        plan_id = serializer.validated_data['plan_id']
 
         try:
             plan = SubscriptionPlan.objects.get(id=plan_id, is_public=True)
         except SubscriptionPlan.DoesNotExist:
-            return Response({'error': 'چنین پلنی وجود ندارد.'}, status=404)
+            return Response({'error': 'چنین پلنی وجود ندارد یا قابل خرید نیست.'}, status=404)
+
+        if plan.is_trial:
+            return Response({'error': 'پلن آزمایشی قابل خریداری نیست.'}, status=status.HTTP_400_BAD_REQUEST)
 
         now = timezone.now()
 
-        # Update Plan Users
         subscription, created = UserSubscription.objects.update_or_create(
             user=request.user,
-            defaults={'plan': plan, 'start_date': now,
-                      'end_date': now + timedelta(days=plan.duration_days)
-                      }
+            defaults={
+                'plan': plan,
+                'start_date': now,
+                'end_date': now + timedelta(days=plan.duration_days)
+            }
         )
 
         return Response({

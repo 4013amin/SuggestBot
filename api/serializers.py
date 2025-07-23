@@ -50,3 +50,6 @@ class UserSubscriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserSubscription
         fields = ['plan', 'start_date', 'end_date', 'is_active']
+
+class BuySubscriptionSerializer(serializers.Serializer):
+    plan_id = serializers.IntegerField()
