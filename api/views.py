@@ -187,7 +187,7 @@ class MySubscriptionView(generics.RetrieveAPIView):
     - ایجاد یا بروزرسانی اشتراک کاربر با پلن انتخاب شده.
     - بازگرداندن جزئیات اشتراک جدید شامل نام پلن و بازه زمانی.
     """,
-    request=serializers.UserSubscription,  # اگر داری، یا None
+    request=serializers.UserSubscription,
     responses={
         200: {
             'message': 'متنی در مورد موفقیت خرید',
