@@ -4,7 +4,6 @@ import logging
 
 class WooCommerceService:
     def __init__(self, store):
-        # با گرفتن آبجکت Store، به تمام اطلاعات اتصال دسترسی پیدا می‌کنیم.
         self.store = store
         self.api = API(
             url=store.site_url,
