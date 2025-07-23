@@ -1,9 +1,35 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
 
 
 # Create your models here.
+
+class SubscriptionPlan(models.Model):
+    name = models.CharField(max_length=100, unique=True, verbose_name=_('نام طرح'))
+    price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="قیمت (تومان)")
+    duration_days = models.IntegerField(verbose_name="مدت زمان (روز)")
+    is_public = models.BooleanField(default=True, help_text="آیا این طرح برای خرید در دسترس کاربران باشد؟")
+
+    def __str__(self):
+        return self.name
+
+
+class UserSubscription(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='subscription')
+    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.SET_NULL, null=True, blank=True)
+    start_date = models.DateTimeField(verbose_name="تاریخ شروع")
+    end_date = models.DateTimeField(verbose_name="تاریخ انقضا")
+
+    @property
+    def is_active(self):
+        return self.end_date > timezone.now()
+
+    def __str__(self):
+        return f"Subscription for {self.user.username} (Plan: {self.plan.name if self.plan else 'None'})"
+
+
 class Store(models.Model):
     owner = models.ForeignKey(
         User,
@@ -29,3 +55,12 @@ class Store(models.Model):
         verbose_name = _("فروشگاه")
         verbose_name_plural = _("فروشگاه‌ها")
         ordering = ['-created_at']
+
+
+class OTPCode(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otp_codes')
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_valid(self):
+        return (timezone.now() - self.created_at).total_seconds() < 120
