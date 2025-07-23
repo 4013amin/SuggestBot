@@ -38,11 +38,18 @@ def api_root(request, format=None):
 
 # RegisterUsers
 @extend_schema(
-    summary='Retrieve user profile',
+    summary='ثبت نام یا ایجاد کاربر جدید با شماره تلفن',
+    description="""
+    این endpoint برای ثبت نام یا ورود اولیه کاربر با شماره تلفن استفاده می‌شود.
+    مراحل کار:
+    - دریافت شماره تلفن از کاربر.
+    - ایجاد کاربر جدید در صورت عدم وجود.
+    - اختصاص خودکار پلن آزمایشی رایگان (یک ماهه) به کاربران جدید.
+    - تولید و ذخیره کد OTP شش رقمی.
+    - ارسال (در اینجا فقط چاپ در کنسول) کد OTP برای تایید شماره تلفن.
+    """,
     request=serializers.UserRegisterSerializer,
-    responses={
-        status.HTTP_200_OK: serializers.MessageSerializer,
-    }
+    responses={status.HTTP_200_OK: serializers.MessageSerializer}
 )
 class OTPRegisterView(APIView):
     permission_classes = [AllowAny]
@@ -62,7 +69,7 @@ class OTPRegisterView(APIView):
             user.save()
 
             try:
-                trial_plan = SubscriptionPlan.objects.get(name='Trial - 1 Month Free')
+                trial_plan = SubscriptionPlan.objects.get(name='طرح رایگان یک ماهه')
                 now = timezone.now()
                 UserSubscription.objects.create(
                     user=user,
@@ -71,7 +78,7 @@ class OTPRegisterView(APIView):
                     end_date=now + timedelta(days=trial_plan.duration_days)
                 )
             except SubscriptionPlan.DoesNotExist:
-                logger.error("Trial subscription plan not found in the database!")
+                logger.error("پلن آزمایشی پیدا نشد!")
 
         code = str(random.randint(100000, 999999))
         OTPCode.objects.filter(user=user).delete()
@@ -87,18 +94,25 @@ class OTPRegisterView(APIView):
 
 
 @extend_schema(
-    summary="Verify OTP code and get authentication token",
-    description="Verifies the OTP and if valid, returns the user's authentication token.",
+    summary="تایید کد OTP و دریافت توکن احراز هویت",
+    description="""
+    این endpoint کد OTP ارسال شده را بررسی می‌کند.
+    - اگر کد و شماره تلفن معتبر باشند و کد منقضی نشده باشد:
+        - توکن احراز هویت برای کاربر تولید یا بازیابی می‌شود.
+        - کد OTP مصرف و حذف می‌گردد.
+        - توکن به عنوان پاسخ بازگردانده می‌شود.
+    - در غیر این صورت، خطای مناسب بازگردانده می‌شود.
+    """,
     request=serializers.UserVerifySerializer,
     responses={
         200: serializers.AuthTokenSerializer,
-        400: {"description": "Invalid input, code expired, or user not found"},
-        500: {"description": "Internal server error"},
+        400: {"description": "ورودی نامعتبر، کد منقضی شده یا کاربر یافت نشد"},
+        500: {"description": "خطای داخلی سرور"},
     },
     examples=[
         OpenApiExample(
-            'Login Success',
-            summary='Successful verification returns a token',
+            'موفقیت ورود',
+            summary='تایید موفق کد و بازگردانی توکن',
             value={'token': '9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b'},
             response_only=True,
             status_codes=['200']
@@ -116,10 +130,7 @@ class OTPVerifyView(APIView):
         code = serializer.validated_data['code']
 
         try:
-            otp_entry = OTPCode.objects.get(
-                user__username=phone_number,
-                code=code
-            )
+            otp_entry = OTPCode.objects.get(user__username=phone_number, code=code)
         except OTPCode.DoesNotExist:
             return Response({'error': 'کد وارد شده یا شماره تلفن نامعتبر است.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -134,27 +145,86 @@ class OTPVerifyView(APIView):
                 token, _ = Token.objects.get_or_create(user=user)
                 otp_entry.delete()
 
+                response_data = {'token': token.key}
+                return Response(response_data, status=status.HTTP_200_OK)
+
         except Exception as e:
             logger.error(f"Error during OTP verification for {user.username}: {e}", exc_info=True)
             return Response({"error": "خطای سیستمی در پردازش احراز هویت."},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        response_data = {
-            'token': token.key,
-        }
-        return Response(response_data, status=status.HTTP_200_OK)
 
-
-
+@extend_schema(
+    summary="لیست پلن‌های اشتراک عمومی",
+    description="این endpoint لیست تمام پلن‌های اشتراکی را که به صورت عمومی در دسترس هستند بازمی‌گرداند.",
+    responses={200: SubscriptionPlanSerializer(many=True)}
+)
 class SubscriptionPlanListView(generics.ListAPIView):
     queryset = SubscriptionPlan.objects.filter(is_public=True)
     permission_classes = [IsAuthenticated]
     serializer_class = SubscriptionPlanSerializer
 
+
+@extend_schema(
+    summary="نمایش اشتراک فعال کاربر",
+    description="این endpoint اطلاعات اشتراک فعلی کاربر را نمایش می‌دهد.",
+    responses={200: UserSubscriptionSerializer}
+)
 class MySubscriptionView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = UserSubscriptionSerializer
 
     def get_object(self):
-
         return get_object_or_404(UserSubscription, user=self.request.user)
+
+
+@extend_schema(
+    summary="خرید یا تمدید پلن اشتراک",
+    description="""
+    این endpoint برای خرید یا تمدید پلن اشتراک استفاده می‌شود.
+    - دریافت شناسه پلن مورد نظر.
+    - بررسی وجود پلن و عمومی بودن آن.
+    - ایجاد یا بروزرسانی اشتراک کاربر با پلن انتخاب شده.
+    - بازگرداندن جزئیات اشتراک جدید شامل نام پلن و بازه زمانی.
+    """,
+    request=serializers.UserSubscription,  # اگر داری، یا None
+    responses={
+        200: {
+            'message': 'متنی در مورد موفقیت خرید',
+            'start_date': 'تاریخ شروع اشتراک',
+            'end_date': 'تاریخ پایان اشتراک',
+            'plan': 'نام پلن خریداری شده'
+        },
+        400: {'error': 'آیدی پلن ارسال نشده است.'},
+        404: {'error': 'چنین پلنی وجود ندارد.'}
+    }
+)
+class BuySubscriptionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        plan_id = request.data.get('plan_id')
+        if not plan_id:
+            return Response({'error': 'آیدی پلن ارسال نشده است.'}, status=400)
+
+        try:
+            plan = SubscriptionPlan.objects.get(id=plan_id, is_public=True)
+        except SubscriptionPlan.DoesNotExist:
+            return Response({'error': 'چنین پلنی وجود ندارد.'}, status=404)
+
+        now = timezone.now()
+
+        # Update Plan Users
+        subscription, created = UserSubscription.objects.update_or_create(
+            user=request.user,
+            defaults={'plan': plan, 'start_date': now,
+                      'end_date': now + timedelta(days=plan.duration_days)
+                      }
+        )
+
+        return Response({
+            'message': f'پلن {plan.name} با موفقیت برای شما فعال شد.',
+            'start_date': subscription.start_date,
+            'end_date': subscription.end_date,
+            'plan': plan.name
+        })

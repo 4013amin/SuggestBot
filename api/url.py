@@ -14,7 +14,7 @@ from .views import (
     # View های مربوط به اشتراک
     SubscriptionPlanListView,
     MySubscriptionView,
-
+    BuySubscriptionView
     # ViewSet های مربوط به سایر بخش‌ها (که در آینده اضافه می‌شوند)
     # ProfileView,
     # StoreViewSet,
@@ -47,6 +47,9 @@ urlpatterns = [
 
     # GET /api/v1/subscriptions/status/ (وضعیت اشتراک فعلی کاربر)
     path('subscriptions/status/', MySubscriptionView.as_view(), name='my-subscription-status'),
+
+    #BY Plans
+    path('subscription/buy/', BuySubscriptionView.as_view(), name='buy-subscription'),
 
     # --- سایر بخش‌ها (در آینده اضافه خواهند شد) ---
     # مثال برای URL های آینده:

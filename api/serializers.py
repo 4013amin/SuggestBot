@@ -5,25 +5,27 @@ from accounts.models import SubscriptionPlan, UserSubscription
 
 
 # Profile users
-
 class UserRegisterSerializer(serializers.Serializer):
-    phone_number = serializers.CharField(
-        max_length=11,
-    )
+    phone_number = serializers.CharField(max_length=11)
 
     def validate_phone_number(self, value):
         if not value.isdigit() or len(value) != 11 or not value.startswith('09'):
-            raise serializers.ValidationError('Invalid phone number')
+            raise serializers.ValidationError('شماره تلفن وارد شده نامعتبر است.')
         return value
 
 
 class UserVerifySerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=11)
-    code = serializers.CharField(max_length=6)
+    code = serializers.CharField(max_length=6, min_length=6)
+
+    def validate_phone_number(self, value):
+        if not value.isdigit() or len(value) != 11 or not value.startswith('09'):
+            raise serializers.ValidationError('شماره تلفن وارد شده نامعتبر است.')
+        return value
 
     def validate_code(self, value):
-        if not value.isdigit() or len(value) != 11 or not value.startswith('09'):
-            raise serializers.ValidationError('Invalid code')
+        if not value.isdigit():
+            raise serializers.ValidationError('کد تایید باید فقط شامل عدد باشد.')
         return value
 
 
