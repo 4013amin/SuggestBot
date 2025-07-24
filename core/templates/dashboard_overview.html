@@ -8,7 +8,7 @@
 </div>
 
 <!-- Stats Section -->
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 25px;">
     <div class="card stat-card">
         <div class="value">{{ total_views }}</div>
         <div class="label">بازدید محصولات (۳۰ روز)</div>
@@ -25,38 +25,38 @@
 
 <!-- Main Content Grid -->
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 30px;">
-    
+
     <!-- Popular Products -->
     <div class="card">
-        <h3>محصولات محبوب (پربازدیدترین‌ها)</h3>
-        <table style="width: 100%; border-collapse: collapse;">
+        <h3 style="color: #2980b9;"><i class="fas fa-star" style="margin-left: 10px;"></i>محصولات محبوب (پربازدیدترین‌ها)</h3>
+        <table>
             {% for product in popular_products %}
-            <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 10px;">
-                    <a href="{% url 'core:product_detail' product.pk %}" style="text-decoration: none; color: #3498db;">{{ product.name }}</a>
+            <tr>
+                <td>
+                    <a href="{% url 'core:product_detail' product.pk %}">{{ product.name }}</a>
                 </td>
-                <td style="text-align: left; padding: 10px;"><strong>{{ product.views_count }}</strong> بازدید</td>
+                <td style="text-align: left;"><strong>{{ product.views_count }}</strong> بازدید</td>
             </tr>
             {% empty %}
-            <tr><td colspan="2" style="text-align: center; padding: 20px;">هنوز داده‌ای برای نمایش وجود ندارد.</td></tr>
+            <tr><td colspan="2" style="text-align: center; padding: 20px; color: #777;">هنوز داده‌ای برای نمایش وجود ندارد.</td></tr>
             {% endfor %}
         </table>
     </div>
 
     <!-- Attention Needed Products -->
     <div class="card">
-        <h3>نیاز به توجه (فرصت‌های از دست رفته)</h3>
-        <p style="font-size: 0.9em; color: #777;">محصولاتی که بازدید بالایی دارند اما به سبد خرید اضافه نشده‌اند.</p>
-        <table style="width: 100%; border-collapse: collapse;">
+        <h3 style="color: #c0392b;"><i class="fas fa-exclamation-triangle" style="margin-left: 10px;"></i>نیاز به توجه (فرصت‌های از دست رفته)</h3>
+        <p style="font-size: 0.9em; color: #777; margin-top: -10px; margin-bottom: 20px;">محصولاتی که بازدید بالایی دارند اما به سبد خرید اضافه نشده‌اند.</p>
+        <table>
             {% for product in attention_products %}
-            <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 10px;">
-                    <a href="{% url 'core:product_detail' product.pk %}" style="text-decoration: none; color: #e74c3c;">{{ product.name }}</a>
+            <tr>
+                <td>
+                    <a href="{% url 'core:product_detail' product.pk %}" style="color: #c0392b;">{{ product.name }}</a>
                 </td>
-                <td style="text-align: left; padding: 10px;"><strong>{{ product.views_count }}</strong> بازدید / <strong>{{ product.carts_count }}</strong> سبد</td>
+                <td style="text-align: left;"><strong>{{ product.views_count }}</strong> بازدید / <strong>{{ product.carts_count }}</strong> سبد</td>
             </tr>
             {% empty %}
-            <tr><td colspan="2" style="text-align: center; padding: 20px;">محصولی با این شرایط یافت نشد.</td></tr>
+            <tr><td colspan="2" style="text-align: center; padding: 20px; color: #777;">محصولی با این شرایط یافت نشد.</td></tr>
             {% endfor %}
         </table>
     </div>
@@ -65,15 +65,15 @@
 
 <!-- Recommendations -->
 <div class="card">
-    <h3>آخرین پیشنهادهای هوشمند</h3>
+    <h3 style="color: #27ae60;"><i class="fas fa-lightbulb" style="margin-left: 10px;"></i>آخرین پیشنهادهای هوشمند</h3>
     {% for rec in recommendations %}
-        <div style="border-bottom: 1px solid #eee; padding: 15px 0;">
-            <p><strong>برای محصول: <a href="{% url 'core:product_detail' rec.product.pk %}">{{ rec.product.name }}</a></strong></p>
-            <p>{{ rec.text }}</p>
-            <small style="color: #999;">دلیل: {{ rec.get_reason_display }}</small>
+        <div style="border-bottom: 1px solid #f0f0f0; padding: 15px 0;">
+            <p style="margin: 0;"><strong>برای محصول: <a href="{% url 'core:product_detail' rec.product.pk %}">{{ rec.product.name }}</a></strong></p>
+            <p style="margin: 5px 0 10px;">{{ rec.text }}</p>
+            <small style="color: #7f8c8d; background: #f4f7f9; padding: 3px 8px; border-radius: 4px;">دلیل: {{ rec.get_reason_display }}</small>
         </div>
     {% empty %}
-        <p style="text-align: center;">هنوز پیشنهادی برای شما تولید نشده است.</p>
+        <p style="text-align: center; color: #777;">هنوز پیشنهادی برای شما تولید نشده است.</p>
     {% endfor %}
 </div>
 

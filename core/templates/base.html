@@ -1,80 +1,158 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}داشبورد تحلیلگر هوشمند{% endblock %}</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Simple Icons (optional, but nice) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2c3e50;
+            --background-color: #f4f7f9;
+            --card-bg-color: #ffffff;
+            --text-color: #34495e;
+            --heading-color: #2c3e50;
+            --border-color: #e_a_e_c;
+        }
 
+        body {
+            font-family: 'Vazirmatn', sans-serif;
+            background-color: var(--background-color);
+            margin: 0;
+            color: var(--text-color);
+            font-size: 16px;
+        }
 
-{% block title %}داشبورد اصلی{% endblock %}
+        .main-layout {
+            display: flex;
+            min-height: 100vh;
+        }
 
-{% block content %}
-<div class="content-header">
-    <h1>داشبورد اصلی</h1>
-</div>
+        .sidebar {
+            width: 260px;
+            background-color: var(--secondary-color);
+            color: #ecf0f1;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 15px rgba(0, 0, 0, 0.1);
+        }
 
-<!-- Stats Section -->
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
-    <div class="card stat-card">
-        <div class="value">{{ total_views }}</div>
-        <div class="label">بازدید محصولات (۳۰ روز)</div>
+        .sidebar-header {
+            text-align: center;
+            margin-bottom: 40px;
+            font-size: 1.6em;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .sidebar-nav a {
+            color: #bdc3c7;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 14px 20px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+        }
+
+        .sidebar-nav a:hover, .sidebar-nav a.active {
+            background-color: var(--primary-color);
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .content-area {
+            flex-grow: 1;
+            padding: 40px;
+            overflow-y: auto;
+        }
+
+        .content-header h1 {
+            margin-top: 0;
+            margin-bottom: 30px;
+            color: var(--heading-color);
+            font-size: 2em;
+        }
+
+        .card {
+            background: var(--card-bg-color);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.05);
+            margin-bottom: 25px;
+            border: 1px solid var(--border-color);
+        }
+
+        .stat-card {
+            text-align: center;
+        }
+
+        .stat-card .value {
+            font-size: 2.8em;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+
+        .stat-card .label {
+            color: #7f8c8d;
+            margin-top: 5px;
+            font-size: 1em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95em;
+        }
+        
+        table tr {
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        table td {
+            padding: 15px 10px;
+        }
+
+        table tr:last-child {
+            border-bottom: none;
+        }
+
+        a {
+            text-decoration: none;
+            color: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="main-layout">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <i class="fas fa-chart-line"></i> تحلیلگر
+            </div>
+            <nav class="sidebar-nav">
+                <a href="{% url 'core:dashboard_overview' %}" class="{% if request.resolver_match.url_name == 'dashboard_overview' %}active{% endif %}">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>داشبورد اصلی</span>
+                </a>
+                <a href="{% url 'core:connect_site' %}" class="{% if request.resolver_match.url_name == 'connect_site' %}active{% endif %}">
+                    <i class="fas fa-plug"></i>
+                    <span>اتصال به سایت</span>
+                </a>
+                <!-- You can add more links here -->
+            </nav>
+        </aside>
+        <main class="content-area">
+            {% block content %}{% endblock %}
+        </main>
     </div>
-    <div class="card stat-card">
-        <div class="value">{{ total_add_to_cart }}</div>
-        <div class="label">افزودن به سبد (۳۰ روز)</div>
-    </div>
-    <div class="card stat-card">
-        <div class="value">{{ product_count }}</div>
-        <div class="label">کل محصولات ردیابی شده</div>
-    </div>
-</div>
-
-<!-- Main Content Grid -->
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 30px;">
-    
-    <!-- Popular Products -->
-    <div class="card">
-        <h3>محصولات محبوب (پربازدیدترین‌ها)</h3>
-        <table style="width: 100%; border-collapse: collapse;">
-            {% for product in popular_products %}
-            <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 10px;">
-                    <a href="{% url 'core:product_detail' product.pk %}" style="text-decoration: none; color: #3498db;">{{ product.name }}</a>
-                </td>
-                <td style="text-align: left; padding: 10px;"><strong>{{ product.views_count }}</strong> بازدید</td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="2" style="text-align: center; padding: 20px;">هنوز داده‌ای برای نمایش وجود ندارد.</td></tr>
-            {% endfor %}
-        </table>
-    </div>
-
-    <!-- Attention Needed Products -->
-    <div class="card">
-        <h3>نیاز به توجه (فرصت‌های از دست رفته)</h3>
-        <p style="font-size: 0.9em; color: #777;">محصولاتی که بازدید بالایی دارند اما به سبد خرید اضافه نشده‌اند.</p>
-        <table style="width: 100%; border-collapse: collapse;">
-            {% for product in attention_products %}
-            <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 10px;">
-                    <a href="{% url 'core:product_detail' product.pk %}" style="text-decoration: none; color: #e74c3c;">{{ product.name }}</a>
-                </td>
-                <td style="text-align: left; padding: 10px;"><strong>{{ product.views_count }}</strong> بازدید / <strong>{{ product.carts_count }}</strong> سبد</td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="2" style="text-align: center; padding: 20px;">محصولی با این شرایط یافت نشد.</td></tr>
-            {% endfor %}
-        </table>
-    </div>
-
-</div>
-
-<!-- Recommendations -->
-<div class="card">
-    <h3>آخرین پیشنهادهای هوشمند</h3>
-    {% for rec in recommendations %}
-        <div style="border-bottom: 1px solid #eee; padding: 15px 0;">
-            <p><strong>برای محصول: <a href="{% url 'core:product_detail' rec.product.pk %}">{{ rec.product.name }}</a></strong></p>
-            <p>{{ rec.text }}</p>
-            <small style="color: #999;">دلیل: {{ rec.get_reason_display }}</small>
-        </div>
-    {% empty %}
-        <p style="text-align: center;">هنوز پیشنهادی برای شما تولید نشده است.</p>
-    {% endfor %}
-</div>
-
-{% endblock %}
+</body>
+</html>
