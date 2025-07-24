@@ -7,15 +7,42 @@
     <h1>داشبورد اصلی</h1>
 </div>
 
+<!-- Date Filter Form -->
+<div class="card">
+    <form method="get" action="{% url 'core:dashboard_overview' %}" style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+        <div>
+            <label for="start_date" style="font-size: 0.9em; margin-left: 5px;">از تاریخ:</label>
+            <input type="date" id="start_date" name="start_date" value="{{ start_date_str }}" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+        </div>
+        <div>
+            <label for="end_date" style="font-size: 0.9em; margin-left: 5px;">تا تاریخ:</label>
+            <input type="date" id="end_date" name="end_date" value="{{ end_date_str }}" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+        </div>
+        <button type="submit" style="padding: 10px 20px; background: var(--primary-color); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+            <i class="fas fa-filter" style="margin-left: 5px;"></i> اعمال فیلتر
+        </button>
+        <a href="{% url 'core:dashboard_overview' %}" style="text-decoration: none; padding: 10px 15px; font-size: 0.9em;">پاک کردن فیلتر</a>
+    </form>
+</div>
+
+
 <!-- Stats Section -->
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 25px;">
     <div class="card stat-card">
         <div class="value">{{ total_views }}</div>
-        <div class="label">بازدید محصولات (۳۰ روز)</div>
+        <div class="label">بازدید محصولات
+            <span style="display: block; font-size: 0.7em; margin-top: 4px;">
+                {% if is_custom_date_range %}(در بازه انتخابی){% else %}(۳۰ روز گذشته){% endif %}
+            </span>
+        </div>
     </div>
     <div class="card stat-card">
         <div class="value">{{ total_add_to_cart }}</div>
-        <div class="label">افزودن به سبد (۳۰ روز)</div>
+        <div class="label">افزودن به سبد
+             <span style="display: block; font-size: 0.7em; margin-top: 4px;">
+                {% if is_custom_date_range %}(در بازه انتخابی){% else %}(۳۰ روز گذشته){% endif %}
+            </span>
+        </div>
     </div>
     <div class="card stat-card">
         <div class="value">{{ product_count }}</div>
@@ -28,53 +55,60 @@
 
     <!-- Popular Products -->
     <div class="card">
-        <h3 style="color: #2980b9;"><i class="fas fa-star" style="margin-left: 10px;"></i>محصولات محبوب (پربازدیدترین‌ها)</h3>
+        <h3 style="color: #2980b9;"><i class="fas fa-star" style="margin-left: 10px;"></i>محصولات محبوب</h3>
         <table>
             {% for product in popular_products %}
             <tr>
-                <td>
-                    <a href="{% url 'core:product_detail' product.pk %}">{{ product.name }}</a>
+                <td><a href="{% url 'core:product_detail' product.pk %}">{{ product.name }}</a></td>
+                <td style="text-align: left;">
+                    <strong title="افزودن به سبد">{{ product.carts_count }} <i class="fas fa-shopping-cart" style="color:#27ae60;"></i></strong> /
+                    <span title="بازدید" style="font-size: 0.9em; color: #777;">{{ product.views_count }} <i class="fas fa-eye"></i></span>
                 </td>
-                <td style="text-align: left;"><strong>{{ product.views_count }}</strong> بازدید</td>
             </tr>
             {% empty %}
-            <tr><td colspan="2" style="text-align: center; padding: 20px; color: #777;">هنوز داده‌ای برای نمایش وجود ندارد.</td></tr>
+            <tr><td colspan="2" style="text-align: center; padding: 20px; color: #777;">داده‌ای در این بازه زمانی یافت نشد.</td></tr>
             {% endfor %}
         </table>
     </div>
 
     <!-- Attention Needed Products -->
     <div class="card">
-        <h3 style="color: #c0392b;"><i class="fas fa-exclamation-triangle" style="margin-left: 10px;"></i>نیاز به توجه (فرصت‌های از دست رفته)</h3>
-        <p style="font-size: 0.9em; color: #777; margin-top: -10px; margin-bottom: 20px;">محصولاتی که بازدید بالایی دارند اما به سبد خرید اضافه نشده‌اند.</p>
+        <h3 style="color: #c0392b;"><i class="fas fa-exclamation-triangle" style="margin-left: 10px;"></i>نیازمند توجه</h3>
+        <p style="font-size: 0.9em; color: #777; margin-top: -10px; margin-bottom: 20px;">محصولاتی با بازدید بالا و خرید کم</p>
         <table>
             {% for product in attention_products %}
             <tr>
-                <td>
-                    <a href="{% url 'core:product_detail' product.pk %}" style="color: #c0392b;">{{ product.name }}</a>
+                <td><a href="{% url 'core:product_detail' product.pk %}" style="color: #c0392b;">{{ product.name }}</a></td>
+                <td style="text-align: left;">
+                    <strong>{{ product.views_count }}</strong> بازدید / <strong>{{ product.carts_count }}</strong> سبد
                 </td>
-                <td style="text-align: left;"><strong>{{ product.views_count }}</strong> بازدید / <strong>{{ product.carts_count }}</strong> سبد</td>
             </tr>
             {% empty %}
             <tr><td colspan="2" style="text-align: center; padding: 20px; color: #777;">محصولی با این شرایط یافت نشد.</td></tr>
             {% endfor %}
         </table>
     </div>
-
 </div>
 
 <!-- Recommendations -->
 <div class="card">
     <h3 style="color: #27ae60;"><i class="fas fa-lightbulb" style="margin-left: 10px;"></i>آخرین پیشنهادهای هوشمند</h3>
     {% for rec in recommendations %}
-        <div style="border-bottom: 1px solid #f0f0f0; padding: 15px 0;">
-            <p style="margin: 0;"><strong>برای محصول: <a href="{% url 'core:product_detail' rec.product.pk %}">{{ rec.product.name }}</a></strong></p>
-            <p style="margin: 5px 0 10px;">{{ rec.text }}</p>
+        <div style="border-bottom: 1px solid #f0f0f0; padding: 15px 0; {% if forloop.last %}border:none;{% endif %}">
+            <p style="margin: 0; font-weight: bold;">
+                {% if rec.product %}
+                    <i class="fas fa-box-open" style="color: #3498db;"></i>
+                    برای محصول: <a href="{% url 'core:product_detail' rec.product.pk %}">{{ rec.product.name }}</a>
+                {% else %}
+                    <i class="fas fa-globe-americas" style="color: #2ecc71;"></i>
+                    پیشنهاد کلی برای سایت شما
+                {% endif %}
+            </p>
+            <p style="margin: 8px 0 10px;">{{ rec.text }}</p>
             <small style="color: #7f8c8d; background: #f4f7f9; padding: 3px 8px; border-radius: 4px;">دلیل: {{ rec.get_reason_display }}</small>
         </div>
     {% empty %}
         <p style="text-align: center; color: #777;">هنوز پیشنهادی برای شما تولید نشده است.</p>
     {% endfor %}
 </div>
-
 {% endblock %}
