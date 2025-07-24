@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}جزئیات محصول: {{ product.name }}{% endblock %}
+
+{% block content %}
+<div class="content-header" style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px;">
+    {% if product.image_url %}
+    <img src="{{ product.image_url }}" alt="{{ product.name }}"
+         style="width: 80px; height: 80px; border-radius: 8px; object-fit: cover;">
+    {% endif %}
+    <div>
+        <h1>{{ product.name }}</h1>
+        <a href="{{ product.page_url }}" target="_blank" style="font-size: 0.9em; text-decoration: none;">مشاهده در سایت
+            شما</a>
+    </div>
+</div>
+
+<!-- Stats Section -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+    <div class="card stat-card">
+        <div class="value">{{ views_30_days }}</div>
+        <div class="label">بازدید (۳۰ روز)</div>
+    </div>
+    <div class="card stat-card">
+        <div class="value">{{ carts_30_days }}</div>
+        <div class="label">افزودن به سبد (۳۰ روز)</div>
+    </div>
+    <div class="card stat-card">
+        <div class="value">{{ conversion_rate }}%</div>
+        <div class="label">نرخ تبدیل (بازدید به سبد)</div>
+    </div>
+</div>
+
+<!-- Chart and Recommendations -->
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 25px; margin-top: 30px;">
+    <div class="card">
+        <h3>روند بازدید در هفته گذشته</h3>
+        <canvas id="viewsChart"></canvas>
+    </div>
+    <div class="card">
+        <h3>پیشنهادهای هوشمند</h3>
+        {% for rec in recommendations %}
+        <div style="border-bottom: 1px solid #eee; padding: 10px 0;">
+            <p>{{ rec.text }}</p>
+            <small style="color: #999;">دلیل: {{ rec.get_reason_display }}</small>
+        </div>
+        {% empty %}
+        <p>پیشنهاد اختصاصی برای این محصول وجود ندارد.</p>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const ctx = document.getElementById('viewsChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: {{ chart_labels|safe }},
+                datasets: [{
+                    label: 'تعداد بازدیدها',
+                    data: {{ chart_views|safe }},
+                    backgroundColor: 'rgba(52, 152, 219, 0.5)',
+                    borderColor: 'rgba(52, 152, 219, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

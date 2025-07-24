@@ -2,7 +2,8 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
-
+import secrets
+import string
 
 # Create your models here.
 
@@ -65,3 +66,25 @@ class OTPCode(models.Model):
 
     def is_valid(self):
         return (timezone.now() - self.created_at).total_seconds() < 120
+
+
+
+
+
+class ApiKey(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='api_key', verbose_name=_("کاربر"))
+    key = models.CharField(max_length=40, unique=True, editable=False, verbose_name=_("کلید API"))
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"API Key for {self.user.username}"
+
+    def save(self, *args, **kwargs):
+        if not self.key:
+            alphabet = string.ascii_letters + string.digits
+            self.key = 'sk_' + ''.join(secrets.choice(alphabet) for i in range(32))
+        super().save(*args, **kwargs)
+
+    class Meta:
+        verbose_name = _("کلید API")
+        verbose_name_plural = _("کلیدهای API")

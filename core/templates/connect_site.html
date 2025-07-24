@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اتصال سایت شما - تحلیلگر هوشمند</title>
+    <style>
+        body { font-family: 'Vazirmatn', sans-serif; background-color: #f4f7f9; color: #333; line-height: 1.8; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+        h1 { text-align: center; color: #2c3e50; font-weight: 700; }
+        .lead { text-align: center; color: #555; font-size: 1.1em; margin-bottom: 40px; }
+        .step-card { background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 25px; margin-bottom: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .step-card h2 { display: flex; align-items: center; gap: 15px; color: #1a5276; margin-top: 0; }
+        .step-number { background-color: #1a5276; color: #fff; border-radius: 50%; width: 35px; height: 35px; display: inline-flex; align-items: center; justify-content: center; font-size: 1.2em; }
+        .selector-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .selector-table th, .selector-table td { padding: 12px; text-align: right; border-bottom: 1px solid #eee; }
+        .selector-table th { color: #777; font-weight: 400; }
+        .selector-table input[type="text"] { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; direction: ltr; font-family: monospace; font-size: 0.9em; }
+        .help-details { margin-top: 15px; background: #f9f9f9; border: 1px solid #eee; border-radius: 5px; }
+        .help-details summary { padding: 10px; cursor: pointer; font-weight: 700; color: #3498db; }
+        .code-container { position: relative; }
+        #snippet-code { background-color: #2d2d2d; color: #f1f1f1; padding: 20px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; font-family: 'Courier New', Courier, monospace; font-size: 0.9em; direction: ltr; }
+        #copy-button { position: absolute; top: 15px; left: 15px; background-color: #3498db; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; transition: background-color 0.3s; }
+        #copy-button:hover { background-color: #2980b9; }
+        .tab-buttons { display: flex; gap: 10px; border-bottom: 2px solid #eee; margin-bottom: 20px; }
+        .tab-button { padding: 10px 20px; cursor: pointer; border: none; background: none; font-size: 1em; font-family: 'Vazirmatn', sans-serif; border-bottom: 3px solid transparent; }
+        .tab-button.active { border-bottom-color: #1a5276; font-weight: 700; }
+        .instruction-panel { display: none; }
+        .instruction-panel.active { display: block; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>اتصال سایت شما به تحلیلگر هوشمند</h1>
+    <p class="lead">در کمتر از ۳ دقیقه، قدرت هوش مصنوعی را به فروشگاه خود بیاورید و فروش خود را متحول کنید.</p>
+    <div class="step-card">
+        <h2><span class="step-number">۱</span>اسکریپت را برای سایت خود پیکربندی کنید</h2>
+        <p>برای شناسایی محصولات، سلکتور CSS هر بخش را در جدول زیر وارد کنید.</p>
+        <details class="help-details"><summary>راهنما: چگونه سلکتور CSS را پیدا کنم؟</summary><ol><li>در سایت خود به یکی از صفحات محصول بروید.</li><li>روی نام محصول راست‌کلیک کرده و گزینه <strong>Inspect</strong> را انتخاب کنید.</li><li>در پنجره باز شده، روی کد هایلایت شده راست‌کلیک کرده و مسیر <strong>Copy > Copy selector</strong> را انتخاب کنید.</li><li>مقدار کپی‌شده را در فیلد مربوطه در جدول زیر جای‌گذاری کنید. این کار را برای قیمت و سایر موارد تکرار کنید.</li></ol></details>
+        <table class="selector-table">
+            <thead><tr><th>بخش محصول</th><th>سلکتور CSS</th></tr></thead>
+            <tbody><tr><td><strong>نام محصول</strong></td><td><input type="text" id="selector-name" placeholder="h1.product_title" onkeyup="updateSnippet()"></td></tr><tr><td><strong>قیمت محصول</strong></td><td><input type="text" id="selector-price" placeholder=".price .amount" onkeyup="updateSnippet()"></td></tr><tr><td><strong>تصویر اصلی محصول</strong></td><td><input type="text" id="selector-image" placeholder="img.wp-post-image" onkeyup="updateSnippet()"></td></tr><tr><td><strong>دکمه افزودن به سبد خرید</strong></td><td><input type="text" id="selector-cart-button" placeholder="button[name='add-to-cart']" onkeyup="updateSnippet()"></td></tr><tr><td><strong>شناسه یا SKU (اختیاری)</strong></td><td><input type="text" id="selector-sku" placeholder=".sku" onkeyup="updateSnippet()"></td></tr></tbody>
+        </table>
+    </div>
+    <div class="step-card">
+        <h2><span class="step-number">۲</span>اسکریپت شخصی‌سازی شده خود را کپی کنید</h2>
+        <p>اسکریپت زیر بر اساس تنظیمات شما و کلید API اختصاصی‌تان آماده شده است. با کلیک روی دکمه، آن را کپی کنید.</p>
+        <div class="code-container">
+            <pre><code id="snippet-code"><!-- لطفاً ابتدا سلکتورها را در گام ۱ وارد کنید... --></code></pre>
+            <button id="copy-button"><span id="copy-text">کپی کد</span></button>
+        </div>
+    </div>
+    <div class="step-card">
+        <h2><span class="step-number">۳</span>اسکریپت را در سایت خود قرار دهید</h2>
+        <p>کد کپی‌شده را در قالب اصلی سایت خود، درست قبل از بسته شدن تگ <strong></body></strong> قرار دهید.</p>
+        <div class="tab-buttons"><button class="tab-button active" onclick="showTab('wordpress')">وردپرس</button><button class="tab-button" onclick="showTab('shopify')">Shopify</button><button class="tab-button" onclick="showTab('custom')">سایت اختصاصی</button></div>
+        <div id="wordpress-panel" class="instruction-panel active"><ol><li>وارد پیشخوان وردپرس خود شوید.</li><li>از منو به <strong>افزونه‌ها > افزودن</strong> بروید و افزونه <strong>"Insert Headers and Footers"</strong> را نصب و فعال کنید.</li><li>از منو به <strong>تنظیمات > Insert Headers and Footers</strong> بروید.</li><li>اسکریپت را در کادر <strong>"Scripts in Footer"</strong> جای‌گذاری کنید.</li><li>روی دکمه <strong>Save</strong> کلیک کنید.</li></ol></div>
+        <div id="shopify-panel" class="instruction-panel"><ol><li>از پنل ادمین Shopify، به بخش <strong>Online Store > Themes</strong> بروید.</li><li>در تم فعال خود، روی دکمه <strong>Actions > Edit code</strong> کلیک کنید.</li><li>فایل <strong>theme.liquid</strong> را باز کرده و کد را درست قبل از تگ <strong></body></strong> قرار دهید.</li><li>روی <strong>Save</strong> کلیک کنید.</li></ol></div>
+        <div id="custom-panel" class="instruction-panel"><ol><li>فایل اصلی قالب سایت خود را باز کنید.</li><li>به انتهای فایل بروید و کد را درست قبل از تگ <strong></body></strong> قرار دهید.</li><li>فایل را ذخیره و آپلود کنید.</li></ol></div>
+    </div>
+</div>
+
+<!-- ==================== JAVASCRIPT BLOCK (FIXED) ==================== -->
+<script>
+    /**
+     * تابع اصلی برای به‌روزرسانی لحظه‌ای اسکریپت در کادر کد
+     */
+    function updateSnippet() {
+        const selectors = {
+            productName: document.getElementById('selector-name').value || "h1.product_title",
+            productPrice: document.getElementById('selector-price').value || ".price .amount",
+            productImage: document.getElementById('selector-image').value || "img.wp-post-image",
+            addToCartButton: document.getElementById('selector-cart-button').value || "button[name='add-to-cart']",
+            productId: document.getElementById('selector-sku').value || ".sku",
+        };
+
+        // کلید API مستقیماً از context جنگو در اینجا خوانده می‌شود
+        const apiKey = "{{ api_key }}";
+
+        const snippet = `<!-- Smart Analyzer Script -->
+<script id="smart-analyzer-script">
+(function() {
+    const config = {
+        apiKey: '${apiKey}',
+        serverUrl: 'https://your-analyzer-app.com/api/v2/track-event/',
+        selectors: ${JSON.stringify(selectors, null, 4)}
+    };
+
+    const safeGetValue = (selector, attribute = 'innerText') => {
+        try {
+            const element = document.querySelector(selector);
+            if (!element) return null;
+            if (attribute === 'innerText') return element.innerText.trim();
+            return element.getAttribute(attribute);
+        } catch (e) {
+            console.warn("Smart Analyzer: Selector not found - " + selector);
+            return null;
+        }
+    };
+
+    const getProductData = () => {
+        const data = {
+            name: safeGetValue(config.selectors.productName),
+            price: safeGetValue(config.selectors.productPrice),
+            imageUrl: safeGetValue(config.selectors.productImage, 'src'),
+            sku: safeGetValue(config.selectors.productId),
+            pageUrl: window.location.href,
+        };
+        return data.name ? data : null;
+    };
+
+    const sendEvent = async (eventName, payload) => {
+        try {
+            await fetch(config.serverUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-KEY': config.apiKey },
+                body: JSON.stringify({ event: eventName, data: payload }),
+            });
+            console.log(\`Smart Analyzer: Event '\${eventName}' tracked.\`);
+        } catch (e) {
+            console.error("Smart Analyzer: Failed to send tracking data.", e);
+        }
+    };
+
+    window.addEventListener('load', () => {
+        const productData = getProductData();
+        if (productData) {
+            sendEvent('product_view', productData);
+        }
+    });
+
+    if (config.selectors.addToCartButton) {
+        document.addEventListener('click', e => {
+            if (e.target.closest(config.selectors.addToCartButton)) {
+                const productData = getProductData();
+                if (productData) {
+                    sendEvent('add_to_cart', productData);
+                }
+            }
+        });
+    }
+})();
+<\/script>
+<!-- End Smart Analyzer Script -->`;
+
+        document.getElementById('snippet-code').textContent = snippet;
+    }
+
+    /**
+     * منطق دکمه کپی
+     */
+    document.getElementById('copy-button').addEventListener('click', function() {
+        const codeToCopy = document.getElementById('snippet-code').textContent;
+        navigator.clipboard.writeText(codeToCopy).then(() => {
+            const button = this;
+            const copyTextSpan = button.querySelector('#copy-text');
+            const originalText = copyTextSpan.textContent;
+
+            copyTextSpan.textContent = 'کپی شد!';
+            button.style.backgroundColor = '#27ae60';
+
+            setTimeout(() => {
+                copyTextSpan.textContent = originalText;
+                button.style.backgroundColor = '#3498db';
+            }, 2000);
+        }).catch(err => {
+            console.error('خطا در کپی کردن: ', err);
+        });
+    });
+
+    /**
+     * منطق جابجایی بین تب‌ها
+     */
+    function showTab(tabName) {
+        document.querySelectorAll('.instruction-panel').forEach(panel => {
+            panel.classList.remove('active');
+        });
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.classList.remove('active');
+        });
+
+        document.getElementById(tabName + '-panel').classList.add('active');
+        document.querySelector(`.tab-button[onclick="showTab('${tabName}')"]`).classList.add('active');
+    }
+
+    // اجرای اولیه اسکریپت پس از بارگذاری کامل صفحه
+    document.addEventListener('DOMContentLoaded', function() {
+        updateSnippet();
+    });
+</script>
+</body>
+</html>

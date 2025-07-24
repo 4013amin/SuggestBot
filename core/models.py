@@ -1,76 +1,77 @@
 from django.db import models
 from accounts.models import Store
 from django.utils.translation import gettext_lazy as _
+from django.db import models
+from django.contrib.auth.models import User
+from django.utils import timezone
+import secrets
+import string
 
 
 # Create your models here.
-class ProductCategory(models.Model):
-    store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name='categories')
-    woocommerce_id = models.PositiveIntegerField(_("شناسه ووکامرس"))
-    name = models.CharField(_("نام"), max_length=255)
-    slug = models.SlugField(_("اسلاگ"), max_length=255)
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        unique_together = ('store', 'woocommerce_id')
-        verbose_name = _("دسته‌بندی محصول")
-        verbose_name_plural = _("دسته‌بندی‌های محصولات")
-
-
 class Product(models.Model):
-    store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name='products')
-    woocommerce_id = models.PositiveIntegerField(_("شناسه ووکامرس"))
-    name = models.CharField(_("نام"), max_length=255)
-    slug = models.SlugField(_("اسلاگ"), max_length=255)
-    permalink = models.URLField(_("لینک محصول"))
-
-    status = models.CharField(_("وضعیت"), max_length=20, default='publish')
-    price = models.DecimalField(_("قیمت"), max_digits=12, decimal_places=2, default=0)
-    regular_price = models.DecimalField(_("قیمت اصلی"), max_digits=12, decimal_places=2, default=0)
-    sale_price = models.DecimalField(_("قیمت فروش ویژه"), max_digits=12, decimal_places=2, null=True, blank=True)
-    on_sale = models.BooleanField(_("در فروش ویژه؟"), default=False)
-    total_sales = models.PositiveIntegerField(_("تعداد کل فروش"), default=0)
-    stock_quantity = models.IntegerField(_("موجودی انبار"), null=True, blank=True)
-    stock_status = models.CharField(_("وضعیت موجودی"), max_length=20, default='instock')
-    categories = models.ManyToManyField(ProductCategory, related_name='products', blank=True)
-
-    created_at_in_wc = models.DateTimeField(_("زمان ایجاد در ووکامرس"))
-    updated_at_in_wc = models.DateTimeField(_("زمان به‌روزرسانی در ووکامرس"))
-
-    class Meta:
-        unique_together = ('store', 'woocommerce_id')
-        verbose_name = _("محصول")
-        verbose_name_plural = _("محصولات")
-        ordering = ['-total_sales']
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='products')
+    name = models.CharField(max_length=255)
+    price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    sku = models.CharField(max_length=100, null=True, blank=True)
+    image_url = models.URLField(max_length=1024, null=True, blank=True)
+    page_url = models.URLField(max_length=1024, unique=True)  # URL به عنوان شناسه اصلی
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
 
 
-class Order(models.Model):
-    store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name='orders')
-    woocommerce_id = models.PositiveIntegerField(_("شناسه ووکامرس"))
-    status = models.CharField(_("وضعیت سفارش"), max_length=50)
-    total_amount = models.DecimalField(_("مبلغ کل"), max_digits=12, decimal_places=2)
+class ProductEvent(models.Model):
+    class EventType(models.TextChoices):
+        VIEW = 'VIEW', 'بازدید محصول'
+        ADD_TO_CART = 'ADD_TO_CART', 'افزودن به سبد'
 
-    created_at_in_wc = models.DateTimeField(_("زمان ایجاد در ووکامرس"))
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='events')
+    event_type = models.CharField(max_length=20, choices=EventType.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
 
-    class Meta:
-        unique_together = ('store', 'woocommerce_id')
-        verbose_name = _("سفارش")
-        verbose_name_plural = _("سفارشات")
-        ordering = ['-created_at_in_wc']
+    def __str__(self):
+        return f"{self.get_event_type_display()} for {self.product.name}"
 
 
-class OrderItem(models.Model):
-    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
-    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, related_name='order_items')
-    woocommerce_product_id = models.PositiveIntegerField()
-    quantity = models.PositiveIntegerField(_("تعداد"))
-    price_at_purchase = models.DecimalField(_("قیمت در زمان خرید"), max_digits=12, decimal_places=2)
+class Recommendation(models.Model):
+    class ReasonType(models.TextChoices):
+        LOW_VIEW = 'LOW_VIEW', 'بازدید کم'
+        HIGH_VIEW_LOW_ADD = 'HIGH_VIEW_LOW_ADD', 'بازدید بالا، افزودن به سبد کم'
+        POPULAR_ITEM = 'POPULAR_ITEM', 'محصول محبوب'
 
-    class Meta:
-        verbose_name = _("آیتم سفارش")
-        verbose_name_plural = _("آیتم‌های سفارش")
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='recommendations')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='core_recommendations', null=True)
+    reason = models.CharField(max_length=30, choices=ReasonType.choices)
+    text = models.TextField(verbose_name="متن پیشنهاد")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"پیشنهاد برای {self.product.name}"
+
+
+class OTPCode(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='Core_OTPCode')  # اصلاح شد
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_valid(self):
+        return (timezone.now() - self.created_at).total_seconds() < 120
+
+
+class ApiKey(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='core_ApiKe')  # اصلاح شد
+    key = models.CharField(max_length=40, unique=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if not self.key:
+            alphabet = string.ascii_letters + string.digits
+            self.key = 'sk_' + ''.join(secrets.choice(alphabet) for i in range(32))
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"API Key for {self.user.username}"

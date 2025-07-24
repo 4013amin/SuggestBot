@@ -1,0 +1,80 @@
+
+
+{% block title %}داشبورد اصلی{% endblock %}
+
+{% block content %}
+<div class="content-header">
+    <h1>داشبورد اصلی</h1>
+</div>
+
+<!-- Stats Section -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+    <div class="card stat-card">
+        <div class="value">{{ total_views }}</div>
+        <div class="label">بازدید محصولات (۳۰ روز)</div>
+    </div>
+    <div class="card stat-card">
+        <div class="value">{{ total_add_to_cart }}</div>
+        <div class="label">افزودن به سبد (۳۰ روز)</div>
+    </div>
+    <div class="card stat-card">
+        <div class="value">{{ product_count }}</div>
+        <div class="label">کل محصولات ردیابی شده</div>
+    </div>
+</div>
+
+<!-- Main Content Grid -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 30px;">
+    
+    <!-- Popular Products -->
+    <div class="card">
+        <h3>محصولات محبوب (پربازدیدترین‌ها)</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+            {% for product in popular_products %}
+            <tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 10px;">
+                    <a href="{% url 'core:product_detail' product.pk %}" style="text-decoration: none; color: #3498db;">{{ product.name }}</a>
+                </td>
+                <td style="text-align: left; padding: 10px;"><strong>{{ product.views_count }}</strong> بازدید</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="2" style="text-align: center; padding: 20px;">هنوز داده‌ای برای نمایش وجود ندارد.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+
+    <!-- Attention Needed Products -->
+    <div class="card">
+        <h3>نیاز به توجه (فرصت‌های از دست رفته)</h3>
+        <p style="font-size: 0.9em; color: #777;">محصولاتی که بازدید بالایی دارند اما به سبد خرید اضافه نشده‌اند.</p>
+        <table style="width: 100%; border-collapse: collapse;">
+            {% for product in attention_products %}
+            <tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 10px;">
+                    <a href="{% url 'core:product_detail' product.pk %}" style="text-decoration: none; color: #e74c3c;">{{ product.name }}</a>
+                </td>
+                <td style="text-align: left; padding: 10px;"><strong>{{ product.views_count }}</strong> بازدید / <strong>{{ product.carts_count }}</strong> سبد</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="2" style="text-align: center; padding: 20px;">محصولی با این شرایط یافت نشد.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+
+</div>
+
+<!-- Recommendations -->
+<div class="card">
+    <h3>آخرین پیشنهادهای هوشمند</h3>
+    {% for rec in recommendations %}
+        <div style="border-bottom: 1px solid #eee; padding: 15px 0;">
+            <p><strong>برای محصول: <a href="{% url 'core:product_detail' rec.product.pk %}">{{ rec.product.name }}</a></strong></p>
+            <p>{{ rec.text }}</p>
+            <small style="color: #999;">دلیل: {{ rec.get_reason_display }}</small>
+        </div>
+    {% empty %}
+        <p style="text-align: center;">هنوز پیشنهادی برای شما تولید نشده است.</p>
+    {% endfor %}
+</div>
+
+{% endblock %}
