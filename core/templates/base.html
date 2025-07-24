@@ -133,26 +133,34 @@
     </style>
 </head>
 <body>
-    <div class="main-layout">
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <i class="fas fa-chart-line"></i> تحلیلگر
-            </div>
-            <nav class="sidebar-nav">
-                <a href="{% url 'core:dashboard_overview' %}" class="{% if request.resolver_match.url_name == 'dashboard_overview' %}active{% endif %}">
-                    <i class="fas fa-tachometer-alt"></i>
-                    <span>داشبورد اصلی</span>
-                </a>
-                <a href="{% url 'core:connect_site' %}" class="{% if request.resolver_match.url_name == 'connect_site' %}active{% endif %}">
-                    <i class="fas fa-plug"></i>
-                    <span>اتصال به سایت</span>
-                </a>
-                <!-- You can add more links here -->
-            </nav>
-        </aside>
-        <main class="content-area">
-            {% block content %}{% endblock %}
-        </main>
-    </div>
+<div class="main-layout">
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <i class="fas fa-chart-line"></i> تحلیلگر
+        </div>
+        <nav class="sidebar-nav">
+            <a href="{% url 'core:dashboard_overview' %}"
+               class="{% if request.resolver_match.url_name == 'dashboard_overview' %}active{% endif %}">
+                <i class="fas fa-tachometer-alt"></i>
+                <span>داشبورد اصلی</span>
+            </a>
+            <a href="{% url 'core:connect_site' %}"
+               class="{% if request.resolver_match.url_name == 'connect_site' %}active{% endif %}">
+                <i class="fas fa-plug"></i>
+                <span>اتصال به سایت</span>
+            </a>
+
+            <a href="{% url 'core:logout' %}"
+               class="{% if request.resolver_match.url_name == 'connect_site' %}active{% endif %}">
+                <i class="fas fa-plug"></i>
+                <span>خروج</span>
+            </a>
+            <!-- You can add more links here -->
+        </nav>
+    </aside>
+    <main class="content-area">
+        {% block content %}{% endblock %}
+    </main>
+</div>
 </body>
 </html>

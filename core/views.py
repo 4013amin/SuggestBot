@@ -8,6 +8,11 @@ from datetime import datetime, timedelta
 from django.db.models import Count, Q
 from .forms import OTPRequestForm, OTPVerifyForm
 from .models import OTPCode, ApiKey, Product, ProductEvent, Recommendation
+from django.contrib.auth import logout as auth_logout
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ==============================================================================
@@ -128,11 +133,11 @@ def dashboard_overview_view(request):
     return render(request, 'dashboard_overview.html', context)
 
 
-# (توابع دیگر مانند request_otp_view, product_detail_view و غیره را در اینجا قرار دهید...)
-# ... (کدهای دیگر ویوها که بدون تغییر هستند)
 def request_otp_view(request):
     if request.user.is_authenticated:
+        logger.info(f"User already authenticated: {request.user.username}")
         return redirect('core:dashboard_overview')
+
     if request.method == 'POST':
         form = OTPRequestForm(request.POST)
         if form.is_valid():
@@ -142,7 +147,10 @@ def request_otp_view(request):
             OTPCode.objects.filter(user=user).delete()
             OTPCode.objects.create(user=user, code=code)
             request.session['otp_phone_number'] = phone_number
+            logger.info(f"OTP sent: phone={phone_number}, {code}, user_created={created}")
             return redirect('core:verify_otp')
+        else:
+            logger.warning(f"Invalid OTP request form: errors={form.errors}")
     else:
         form = OTPRequestForm()
     return render(request, 'request_otp.html', {'form': form})
@@ -150,10 +158,14 @@ def request_otp_view(request):
 
 def verify_otp_view(request):
     if request.user.is_authenticated:
+        logger.info(f"User already authenticated: {request.user.username}")
         return redirect('core:dashboard_overview')
+
     phone_number = request.session.get('otp_phone_number')
     if not phone_number:
+        logger.warning("verify_otp_view: no phone_number in session")
         return redirect('core:request_otp')
+
     if request.method == 'POST':
         form = OTPVerifyForm(request.POST)
         if form.is_valid():
@@ -165,11 +177,16 @@ def verify_otp_view(request):
                     login(request, user)
                     otp.delete()
                     del request.session['otp_phone_number']
+                    logger.info(f"OTP verified successfully for user: {user.username}")
                     return redirect('core:dashboard_overview')
                 else:
                     form.add_error('code', 'کد منقضی شده است. لطفاً دوباره تلاش کنید.')
+                    logger.warning(f"Expired OTP for user: {user.username}")
             except (OTPCode.DoesNotExist, User.DoesNotExist):
                 form.add_error('code', 'کد وارد شده صحیح نیست.')
+                logger.warning(f"Invalid OTP or user not found: phone={phone_number}, code={code}")
+        else:
+            logger.warning(f"Invalid OTP verification form: errors={form.errors}")
     else:
         form = OTPVerifyForm()
     return render(request, 'verify_otp.html', {'form': form, 'phone_number': phone_number})
@@ -208,3 +225,8 @@ def product_detail_view(request, pk):
         'recommendations': product_recommendations
     }
     return render(request, 'product_detail.html', context)
+
+
+def logout(request):
+    auth_logout(request)
+    return redirect('core:request_otp')  #
