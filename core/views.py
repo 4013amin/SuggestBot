@@ -1,6 +1,13 @@
+import io
+import os
 from decimal import Decimal
-
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import requests
+from arabic_reshaper import arabic_reshaper
+from bidi import get_display
+from django.conf import settings
 from django.contrib import messages
 from django.core.mail import send_mail
 from django.shortcuts import render, redirect, get_object_or_404
@@ -10,10 +17,16 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db.models import Count, Q
+from matplotlib import pyplot as plt
+from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
+from reportlab.platypus import Paragraph
 from rest_framework.utils import json
 
 from .forms import OTPRequestForm, OTPVerifyForm
@@ -277,36 +290,149 @@ def ai_chat_recommendation(request, pk):
     return JsonResponse({'error': 'فقط درخواست‌های POST مجاز هستند'}, status=400)
 
 
-# دانلود با PDF
+def prepare_rtl_text(text):
+    """آماده‌سازی متن برای نمایش صحیح در PDF"""
+    reshaped_text = arabic_reshaper.reshape(text)
+    return get_display(reshaped_text)
+
+
 @login_required
 def product_report_pdf(request, pk):
     product = get_object_or_404(Product, pk=pk, owner=request.user)
+
+    # ۱. داده‌ها
     thirty_days_ago = timezone.now() - timedelta(days=30)
-    product_data = fetch_product_data(product, thirty_days_ago, timezone.now())
+    views_30_days = product.events.filter(event_type='VIEW', created_at__gte=thirty_days_ago).count()
+    carts_30_days = product.events.filter(event_type='ADD_TO_CART', created_at__gte=thirty_days_ago).count()
+    purchases_30_days = product.events.filter(event_type='PURCHASE', created_at__gte=thirty_days_ago).count()
+    conversion_rate = (carts_30_days / views_30_days * 100) if views_30_days > 0 else 0
+    purchase_rate = (purchases_30_days / views_30_days * 100) if views_30_days > 0 else 0
+
+    # آمار هفتگی
+    today = timezone.now()
+    chart_labels_fa = []
+    chart_views, chart_carts, chart_purchases = [], [], []
+    days_map = {'Saturday': 'شنبه', 'Sunday': 'یکشنبه', 'Monday': 'دوشنبه',
+                'Tuesday': 'سه‌شنبه', 'Wednesday': 'چهارشنبه', 'Thursday': 'پنج‌شنبه', 'Friday': 'جمعه'}
+
+    for i in range(6, -1, -1):
+        day = today - timedelta(days=i)
+        day_name_en = day.strftime('%A')
+        chart_labels_fa.append(days_map.get(day_name_en, day_name_en))
+        chart_views.append(product.events.filter(event_type='VIEW', created_at__date=day.date()).count())
+        chart_carts.append(product.events.filter(event_type='ADD_TO_CART', created_at__date=day.date()).count())
+        chart_purchases.append(product.events.filter(event_type='PURCHASE', created_at__date=day.date()).count())
+
     recommendations = product.core_recommendations.filter(is_active=True).order_by('-confidence_score')
 
+    # ۲. ساخت نمودار
+    fig, ax = plt.subplots(figsize=(10, 5))
+    bar_width = 0.25
+    index = range(len(chart_labels_fa))
+
+    ax.bar([i - bar_width for i in index], chart_views, bar_width, label='بازدید', color='#4e73df')
+    ax.bar(index, chart_carts, bar_width, label='سبد خرید', color='#1cc88a')
+    ax.bar([i + bar_width for i in index], chart_purchases, bar_width, label='خرید', color='#e74a3b')
+
+    ax.set_ylabel('تعداد رویداد')
+    ax.set_title('آمار عملکرد در ۷ روز گذشته')
+    ax.set_xticks(list(index))
+    ax.set_xticklabels(chart_labels_fa)
+    ax.legend()
+    fig.tight_layout()
+
+    # ذخیره نمودار در حافظه
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format='png', dpi=300)
+    buffer.seek(0)
+    plt.close(fig)
+
+    # ۳. تولید PDF
     response = HttpResponse(content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="report_{product.name}.pdf"'
 
     p = canvas.Canvas(response, pagesize=A4)
-    pdfmetrics.registerFont(TTFont('Vazir', 'path/to/Vazir.ttf'))  # مسیر فونت Vazir
-    p.setFont('Vazir', 12)
+    width, height = A4
 
-    y = 800
-    p.drawString(100, y, f"گزارش محصول: {product.name}")
-    y -= 30
-    p.drawString(100, y, f"بازدید 30 روز: {product_data['views']}")
-    y -= 20
-    p.drawString(100, y, f"افزودن به سبد: {product_data['carts']}")
-    y -= 20
-    p.drawString(100, y, f"خرید: {product_data['purchases']}")
-    y -= 20
-    p.drawString(100, y, f"نرخ تبدیل: {product_data['conversion_rate']:.2f}%")
-    y -= 30
-    p.drawString(100, y, "پیشنهادات:")
-    for rec in recommendations:
-        y -= 20
-        p.drawString(100, y, f"- {rec.text} ({'هوش مصنوعی' if rec.reason == 'AI_GENERATED' else 'تحلیل سیستم'})")
+    # فونت فارسی
+    font_path = os.path.join(settings.BASE_DIR, 'core', 'static', 'fonts', 'Vazirmatn-Black.ttf')
+    pdfmetrics.registerFont(TTFont('Vazir', font_path))
+
+    # استایل‌ها
+    styles = getSampleStyleSheet()
+    style_right = ParagraphStyle(
+        name='PersianRight',
+        parent=styles['Normal'],
+        fontName='Vazir',
+        alignment=TA_RIGHT,
+        fontSize=12,
+        leading=20
+    )
+    style_title = ParagraphStyle(name='PersianTitle', parent=style_right, fontSize=18, leading=30)
+
+    # شروع
+    y = height - 1.5 * cm
+    margin_right = width - 2 * cm
+
+    # عنوان
+    title = prepare_rtl_text(f"گزارش جامع محصول: {product.name}")
+    p.setFont('Vazir', 18)
+    p.drawRightString(margin_right, y, title)
+    y -= 1.5 * cm
+
+    # آمار کلی
+    stats_title = prepare_rtl_text("آمار کلیدی (۳۰ روز گذشته)")
+    p.setFont('Vazir', 14)
+    p.drawRightString(margin_right, y, stats_title)
+    y -= 1 * cm
+
+    stats_text = f"""
+    تعداد بازدید: {views_30_days}<br/>
+    تعداد افزودن به سبد خرید: {carts_30_days}<br/>
+    تعداد خرید موفق: {purchases_30_days}<br/>
+    نرخ تبدیل: {conversion_rate:.2f}%<br/>
+    نرخ خرید نهایی: {purchase_rate:.2f}%
+    """
+    stats_paragraph = Paragraph(prepare_rtl_text(stats_text), style_right)
+    stats_paragraph.wrapOn(p, width - 4 * cm, height)
+    stats_paragraph.drawOn(p, 2 * cm, y - stats_paragraph.height)
+    y -= (stats_paragraph.height + 1 * cm)
+
+    # نمودار
+    chart_title = prepare_rtl_text("نمودار عملکرد هفتگی")
+    p.setFont('Vazir', 14)
+    p.drawRightString(margin_right, y, chart_title)
+    y -= 7 * cm
+
+    image = ImageReader(buffer)
+    p.drawImage(image, x=1.5 * cm, y=y, width=18 * cm, height=6 * cm, preserveAspectRatio=True)
+    buffer.close()
+    y -= 1 * cm
+
+    # پیشنهادات
+    recommendations_title = prepare_rtl_text("پیشنهادات بهبود")
+    p.setFont('Vazir', 14)
+    p.drawRightString(margin_right, y, recommendations_title)
+    y -= 1 * cm
+
+    if recommendations:
+        for rec in recommendations:
+            rec_type = 'هوش مصنوعی' if rec.reason == 'AI_GENERATED' else 'تحلیل سیستم'
+            text = f"- {rec.text} <b>(نوع: {rec_type} | اطمینان: {rec.confidence_score:.0%})</b>"
+            paragraph = Paragraph(prepare_rtl_text(text), style_right)
+            paragraph.wrapOn(p, width - 4 * cm, height)
+
+            if y - paragraph.height < 1.5 * cm:
+                p.showPage()
+                p.setFont('Vazir', 12)
+                y = height - 1.5 * cm
+
+            paragraph.drawOn(p, 2 * cm, y - paragraph.height)
+            y -= (paragraph.height + 0.2 * cm)
+    else:
+        no_rec = prepare_rtl_text("در حال حاضر پیشنهاد فعالی برای این محصول وجود ندارد.")
+        p.drawRightString(margin_right - 1 * cm, y, no_rec)
+
     p.showPage()
     p.save()
     return response
