@@ -1,4 +1,8 @@
+from decimal import Decimal
+
 import requests
+from django.contrib import messages
+from django.core.mail import send_mail
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout as auth_logout
 from django.contrib.auth.decorators import login_required
@@ -6,13 +10,22 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db.models import Count, Q
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfgen import canvas
+from rest_framework.utils import json
+
 from .forms import OTPRequestForm, OTPVerifyForm
-from .models import OTPCode, ApiKey, Product, ProductEvent, Recommendation
+from .models import OTPCode, ApiKey, Product, ProductEvent, Recommendation, UserSite
 from .utils import update_recommendations, fetch_product_data, predict_cart_abandonment
 import logging
 import random
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from .utils import fetch_data_for_analysis, generate_ai_recommendations
+from django.views.decorators.cache import cache_control
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 
 logger = logging.getLogger(__name__)
 
@@ -297,6 +310,144 @@ def product_report_pdf(request, pk):
     p.showPage()
     p.save()
     return response
+
+
+@cache_control(max_age=3600)
+def tracking_script_view(request):
+    js_content = """
+    (function() {
+        var apiKey = document.currentScript.getAttribute('data-api-key');
+        if (!apiKey) {
+            console.error('API Key not provided for tracking script.');
+            return;
+        }
+
+        function sendEvent(eventType, productData) {
+            fetch('https://yourdomain.com/api/track-event/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey
+                },
+                body: JSON.stringify({
+                    event_type: eventType,
+                    product: productData,
+                    timestamp: new Date().toISOString()
+                })
+            }).catch(error => console.error('Error sending event:', error));
+        }
+
+        // ردیابی بازدید صفحه محصول
+        if (window.location.pathname.includes('/product/')) {
+            var product = {
+                id: document.querySelector('[data-product-id]')?.dataset.productId || window.location.pathname.split('/').pop(),
+                name: document.querySelector('[data-product-name]')?.dataset.productName || document.title,
+                price: parseFloat(document.querySelector('[data-product-price]')?.dataset.productPrice) || 0,
+                url: window.location.href
+            };
+            sendEvent('VIEW', product);
+        }
+
+        // ردیابی افزودن به سبد خرید
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('[data-add-to-cart]') || e.target.classList.contains('add-to-cart')) {
+                var product = {
+                    id: e.target.closest('[data-product-id]')?.dataset.productId || window.location.pathname.split('/').pop(),
+                    name: e.target.closest('[data-product-name]')?.dataset.productName || document.title,
+                    price: parseFloat(e.target.closest('[data-product-price]')?.dataset.productPrice) || 0,
+                    url: window.location.href
+                };
+                sendEvent('ADD_TO_CART', product);
+            }
+        });
+
+        // ردیابی خرید
+        if (window.location.pathname.includes('/checkout/success') || window.location.pathname.includes('/thank-you')) {
+            var products = Array.from(document.querySelectorAll('[data-purchase-item]')).map(item => ({
+                id: item.dataset.productId || item.id,
+                name: item.dataset.productName || item.querySelector('.product-name')?.textContent,
+                price: parseFloat(item.dataset.productPrice) || 0,
+                url: item.dataset.productUrl || window.location.href
+            }));
+            products.forEach(product => sendEvent('PURCHASE', product));
+        }
+    })();
+    """
+    return HttpResponse(js_content, content_type='application/javascript')
+
+
+@csrf_exempt
+@require_POST
+def track_event_view(request):
+    api_key = request.headers.get('X-API-Key')
+    if not api_key:
+        logger.warning("Track event: No API Key provided")
+        return JsonResponse({'error': 'API Key required'}, status=401)
+
+    try:
+        site = UserSite.objects.get(api_key=api_key, is_active=True)
+    except UserSite.DoesNotExist:
+        logger.warning(f"Track event: Invalid or inactive API Key: {api_key}")
+        return JsonResponse({'error': 'Invalid or inactive API Key'}, status=401)
+
+    try:
+        data = json.loads(request.body)
+        event_type = data['event_type']
+        product_data = data['product']
+        timestamp = data.get('timestamp')
+    except (json.JSONDecodeError, KeyError) as e:
+        logger.error(f"Track event: Invalid data - {str(e)}")
+        return JsonResponse({'error': 'Invalid data'}, status=400)
+
+    if event_type not in ['VIEW', 'ADD_TO_CART', 'PURCHASE']:
+        logger.warning(f"Track event: Invalid event type: {event_type}")
+        return JsonResponse({'error': 'Invalid event type'}, status=400)
+
+    # ایجاد یا به‌روزرسانی محصول
+    product, created = Product.objects.get_or_create(
+        site=site,
+        owner=site.owner,
+        page_url=product_data['url'],
+        defaults={
+            'name': product_data.get('name', 'محصول ناشناس'),
+            'price': Decimal(str(product_data.get('price', 0))),
+            'stock': 100,  # پیش‌فرض
+            'discount': 0,
+            'category': '',
+            'image_url': ''
+        }
+    )
+
+    # ایجاد رویداد
+    ProductEvent.objects.create(
+        product=product,
+        event_type=event_type,
+        created_at=timestamp or timezone.now()
+    )
+
+    logger.info(f"Event tracked: {event_type} for product {product.name} on site {site.site_url}")
+    return JsonResponse({'status': 'success'})
+
+
+@login_required
+def send_dashboard_link_view(request):
+    user = request.user
+    dashboard_url = 'http://127.0.0.1:8000/dashboard/'  # جایگزین با دامنه واقعی
+    try:
+        send_mail(
+            subject='لینک پنل تحلیل فروشگاه شما',
+            message=f'برای مشاهده تحلیل‌های فروشگاه‌تون به این لینک بروید:\n{dashboard_url}\n'
+                    f'با شماره {user.username} و کد OTP وارد شوید.',
+            from_email='from@yourdomain.com',
+            recipient_list=[user.email or 'user@example.com'],
+            fail_silently=False,
+        )
+        messages.success(request, 'لینک پنل با موفقیت به ایمیل شما ارسال شد.')
+        logger.info(f"Dashboard link sent to {user.username} at {user.email}")
+    except Exception as e:
+        messages.error(request, 'خطا در ارسال ایمیل. لطفاً با پشتیبانی تماس بگیرید.')
+        logger.error(f"Failed to send dashboard link to {user.username}: {str(e)}")
+    return redirect('core:dashboard_overview')
 
 
 def logout(request):

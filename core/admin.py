@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import Product, ProductEvent, Recommendation, ApiKey, OTPCode
-
+from django.contrib import admin
+from .models import UserSite, Product, ProductEvent, Recommendation
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
@@ -82,3 +83,22 @@ class OTPCodeAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+@admin.register(UserSite)
+class UserSiteAdmin(admin.ModelAdmin):
+    list_display = ('site_name', 'site_url', 'owner', 'is_active', 'created_at', 'dashboard_link')
+    list_filter = ('is_active', 'owner')
+    search_fields = ('site_name', 'site_url', 'owner__username')
+    readonly_fields = ('api_key', 'created_at', 'dashboard_link')
+    fields = ('owner', 'site_url', 'site_name', 'username', 'password', 'api_key', 'is_active', 'created_at', 'dashboard_link')
+
+    def dashboard_link(self, obj):
+        return f"https://yourdomain.com/dashboard/"  # جایگزین با دامنه واقعی
+    dashboard_link.short_description = 'لینک پنل کاربر'
+
+    def save_model(self, request, obj, form, change):
+        if not obj.api_key:
+            import uuid
+            obj.api_key = str(uuid.uuid4())
+        super().save_model(request, obj, form, change)
