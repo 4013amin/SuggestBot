@@ -85,3 +85,22 @@ class ApiKey(models.Model):
 
     def __str__(self):
         return f"API Key for {self.user.username}"
+
+
+class UserSite(models.Model):
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sites')
+    site_url = models.URLField(unique=True, verbose_name='آدرس سایت')
+    site_name = models.CharField(max_length=255, verbose_name='نام سایت')
+    username = models.CharField(max_length=255, blank=True, verbose_name='نام کاربری سایت')
+    password = models.CharField(max_length=255, blank=True,
+                                verbose_name='رمز عبور سایت')  # ذخیره رمز به‌صورت خام (برای امنیت بیشتر، رمزنگاری کنید)
+    api_key = models.CharField(max_length=50, unique=True, blank=True, null=True, verbose_name='کلید API')
+    is_active = models.BooleanField(default=False, verbose_name='وضعیت فعال')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='تاریخ ایجاد')
+
+    def __str__(self):
+        return f"{self.site_name} ({self.site_url})"
+
+    class Meta:
+        verbose_name = 'سایت کاربر'
+        verbose_name_plural = 'سایت‌های کاربران'
