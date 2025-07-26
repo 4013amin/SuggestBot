@@ -16,6 +16,9 @@ class Product(models.Model):
     sku = models.CharField(max_length=100, null=True, blank=True)
     image_url = models.URLField(max_length=1024, null=True, blank=True)
     page_url = models.URLField(max_length=1024, unique=True)  # URL به عنوان شناسه اصلی
+    stock = models.IntegerField(default=0)
+    category = models.CharField(max_length=100, null=True, blank=True)
+    discount = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -27,10 +30,12 @@ class ProductEvent(models.Model):
     class EventType(models.TextChoices):
         VIEW = 'VIEW', 'بازدید محصول'
         ADD_TO_CART = 'ADD_TO_CART', 'افزودن به سبد'
+        PURCHASE = 'PURCHASE', 'خرید نهایی'
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='events')
     event_type = models.CharField(max_length=20, choices=EventType.choices)
     created_at = models.DateTimeField(auto_now_add=True)
+    user_ip = models.GenericIPAddressField(null=True, blank=True)  # ردیابی رفتار کاربران
 
     def __str__(self):
         return f"{self.get_event_type_display()} for {self.product.name}"
@@ -41,6 +46,10 @@ class Recommendation(models.Model):
         LOW_VIEW = 'LOW_VIEW', 'بازدید کم'
         HIGH_VIEW_LOW_ADD = 'HIGH_VIEW_LOW_ADD', 'بازدید بالا، افزودن به سبد کم'
         POPULAR_ITEM = 'POPULAR_ITEM', 'محصول محبوب'
+        LOW_STOCK = 'LOW_STOCK', 'موجودی کم'
+        HIGH_DISCOUNT = 'HIGH_DISCOUNT', 'تخفیف بالا'
+        AI_GENERATED = 'AI_GENERATED', 'پیشنهاد هوش مصنوعی'
+        DYNAMIC_PRICING = 'DYNAMIC_PRICING', 'قیمت‌گذاری پویا'
 
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='recommendations')
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='core_recommendations', null=True)
@@ -48,6 +57,7 @@ class Recommendation(models.Model):
     text = models.TextField(verbose_name="متن پیشنهاد")
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    confidence_score = models.FloatField(default=0.0)  # امیتاز اعتماد هوش مصنوعی
 
     def __str__(self):
         return f"پیشنهاد برای {self.product.name}"

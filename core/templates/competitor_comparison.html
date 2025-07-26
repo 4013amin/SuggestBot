@@ -1,0 +1,30 @@
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">مقایسه با رقبا برای {{ product.name }}</h5>
+    </div>
+    <div class="card-body">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>رقیب</th>
+                    <th>قیمت</th>
+                    <th>تخفیف</th>
+                    <th>پیشنهاد</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for comp in competitor_data %}
+                    <tr>
+                        <td>{{ comp.name }}</td>
+                        <td>{{ comp.price }}</td>
+                        <td>{{ comp.discount }}%</td>
+                        <td>{{ comp.suggestion }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="4">داده‌ای از رقبا در دسترس نیست</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <a href="{% url 'core:product_detail' product.id %}" class="btn btn-secondary">بازگشت</a>
+    </div>
+</div>

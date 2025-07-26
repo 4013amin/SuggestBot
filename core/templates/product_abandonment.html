@@ -1,0 +1,14 @@
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">تحلیل ترک سبد خرید برای {{ product.name }}</h5>
+    </div>
+    <div class="card-body">
+        {% if error %}
+        <div class="alert alert-warning">{{ error }}</div>
+        {% else %}
+        <p>امتیاز احتمال ترک سبد: {{ abandonment_score }}%</p>
+        <p>پیشنهاد: {{ suggestion }}</p>
+        {% endif %}
+        <a href="{% url 'core:product_detail' product.id %}" class="btn btn-secondary">بازگشت به جزئیات محصول</a>
+    </div>
+</div>

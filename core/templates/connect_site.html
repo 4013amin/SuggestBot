@@ -1,109 +1,12 @@
-{% extends "base.html" %}
-
-{% block title %}اتصال به سایت{% endblock %}
-
-{% block content %}
-<div class="content-header">
-    <h1>اتصال به سایت</h1>
-    <p style="font-size: 1.1em; color: #555;">در ۳ گام ساده، قدرت هوش مصنوعی را به فروشگاه خود بیاورید.</p>
-</div>
-
-<!-- STEP 1: Smart Configuration -->
-<div class="card">
-    <h2><i class="fas fa-magic" style="margin-left:10px;"></i>گام ۱: پیکربندی هوشمند سلکتورها</h2>
-    <p>برای تست با سایت‌های پیچیده مانند دیجیکالا، به جای کپی تک‌تک سلکتورها، سلکتور **عنصر والد محصول** را در کادر زیر پیست کنید و روی دکمه "شناسایی خودکار" کلیک کنید.</p>
-
-    <div style="display: flex; gap: 10px; margin: 20px 0;">
-        <input type="text" id="smart-paste-box" placeholder="سلکتور والد محصول را اینجا پیست کنید..." style="flex-grow: 1; padding: 10px; border: 1px solid var(--primary-color); border-radius: 5px;">
-        <button onclick="autoFillSelectors()" style="padding: 10px 20px; background: var(--primary-color); color: white; border: none; border-radius: 5px; cursor: pointer;">شناسایی خودکار</button>
-    </div>
-
-    <hr style="border: none; border-top: 1px solid #f0f0f0; margin: 30px 0;">
-
-    <form method="post">
-        {% csrf_token %}
-        <p style="font-weight: 700;">یا به صورت دستی سلکتورها را وارد/اصلاح کرده و سپس ذخیره کنید:</p>
-        <table class="selector-table">
-            <tbody>
-                <!-- Django Form will render fields here -->
-                {{ form.as_table }}
-            </tbody>
-        </table>
-        <button type="submit" style="width: 100%; padding: 14px; background: #27ae60; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 1.1em; margin-top: 20px;">
-            <i class="fas fa-save"></i> ذخیره سلکتورها
-        </button>
-    </form>
-</div>
-
-
-<!-- STEP 2: Copy Script -->
-<div class="card">
-    <h2><i class="fas fa-copy" style="margin-left:10px;"></i>گام ۲: کپی اسکریپت شخصی‌سازی شده</h2>
-    <p>اسکریپت زیر بر اساس آخرین تنظیمات ذخیره شده شما آماده شده است. آن را کپی کنید.</p>
-    <div class="code-container">
-        <pre><code id="snippet-code"><!-- سلکتورها را در گام ۱ ذخیره کنید تا اسکریپت ساخته شود... --></code></pre>
-        <button id="copy-button"><span id="copy-text">کپی کد</span></button>
-    </div>
-</div>
-
-<!-- STEP 3: Placement Guide -->
-<div class="card">
-    <h2><i class="fas fa-rocket" style="margin-left:10px;"></i>گام ۳: قرار دادن اسکریپت در سایت</h2>
-    <p>کد کپی‌شده را در قالب اصلی سایت خود، درست قبل از بسته شدن تگ <strong></body></strong> قرار دهید.</p>
-    <!-- Tab structure from previous answer can be placed here -->
-</div>
-
-
-<!-- ==================== JAVASCRIPT BLOCK (FIXED & IMPROVED) ==================== -->
-<script>
-    /**
-     * تابع برای شناسایی خودکار سلکتورها از یک والد
-     */
-    function autoFillSelectors() {
-        const parentSelector = document.getElementById('smart-paste-box').value.trim();
-        if (!parentSelector) {
-            alert('لطفاً ابتدا سلکتور والد را وارد کنید.');
-            return;
-        }
-
-        // FIX: Using getElementById for reliability. Django forms create IDs like 'id_field_name'.
-        document.getElementById('id_name_selector').value = parentSelector + ' h1, ' + parentSelector + ' [itemprop="name"]';
-        document.getElementById('id_price_selector').value = parentSelector + ' .price, ' + parentSelector + ' [itemprop="price"]';
-        document.getElementById('id_image_selector').value = parentSelector + ' img';
-        document.getElementById('id_cart_button_selector').value = parentSelector + ' button[class*="add-to-cart"]';
-        document.getElementById('id_sku_selector').value = parentSelector + ' .sku, ' + parentSelector + ' [itemprop="sku"]';
-
-        updateSnippet();
-        alert('فیلدها به صورت خودکار پر شدند. لطفاً آن‌ها را بررسی و سپس ذخیره کنید.');
-    }
-
-    /**
-     * تابع اصلی برای به‌روزرسانی لحظه‌ای اسکریپت در کادر کد
-     */
-    function updateSnippet() {
-        const selectors = {
-            productName: document.getElementById('id_name_selector').value,
-            productPrice: document.getElementById('id_price_selector').value,
-            productImage: document.getElementById('id_image_selector').value,
-            addToCartButton: document.getElementById('id_cart_button_selector').value,
-            productId: document.getElementById('id_sku_selector').value,
-        };
-
-        const apiKey = "{{ api_key }}";
-
-        // This part is the same as before, it just uses the corrected selectors
-        const snippet = `<!-- Smart Analyzer Script -->\n<script id="smart-analyzer-script">\n(function() {\n    const config = {\n        apiKey: '${apiKey}',\n        serverUrl: 'http://${window.location.host}/api/track/',\n        selectors: ${JSON.stringify(selectors, null, 4)}\n    };\n\n    const safeGetValue = (selector, attribute = 'innerText') => {\n        try {\n            const element = document.querySelector(selector);\n            if (!element) return null;\n            if (attribute === 'innerText') return element.innerText.trim();\n            return element.getAttribute(attribute);\n        } catch (e) { return null; }\n    };\n\n    const getProductData = () => {\n        const data = {\n            name: safeGetValue(config.selectors.productName),\n            price: safeGetValue(config.selectors.productPrice),\n            imageUrl: safeGetValue(config.selectors.productImage, 'src'),\n            sku: safeGetValue(config.selectors.productId),\n            pageUrl: window.location.href,\n        };\n        return data.name ? data : null;\n    };\n\n    const sendEvent = async (eventName, payload) => {\n        try {\n            await fetch(config.serverUrl, {\n                method: 'POST',\n                headers: { 'Content-Type': 'application/json', 'X-API-KEY': config.apiKey },\n                body: JSON.stringify({ event: eventName, data: payload }),\n            });\n        } catch (e) { console.error("Smart Analyzer Error:", e); }\n    };\n    \n    window.addEventListener('load', () => {\n        const productData = getProductData();\n        if (productData) sendEvent('product_view', productData);\n    });\n\n    if (config.selectors.addToCartButton) {\n        document.addEventListener('click', e => {\n            if (e.target.closest(config.selectors.addToCartButton)) {\n                const productData = getProductData();\n                if (productData) sendEvent('add_to_cart', productData);\n            }\n        });\n    }\n})();\n<\/script>\n<!-- End Smart Analyzer Script -->`;
-
-        document.getElementById('snippet-code').textContent = snippet;
-    }
-
-    // ... (منطق دکمه کپی و تب‌ها از پاسخ قبلی) ...
-     document.getElementById('copy-button').addEventListener('click', function() { /* ... same as before ... */ });
-     function showTab(tabName) { /* ... same as before ... */ }
-
-    // اجرای اولیه اسکریپت پس از بارگذاری کامل صفحه
-    document.addEventListener('DOMContentLoaded', function() {
-        updateSnippet();
-    });
-</script>
-{% endblock %}
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>اتصال به سایت</title>
+</head>
+<body>
+    <h1>اتصال به سایت فروشگاهی</h1>
+    <p>کلید API شما: <code>{{ api_key }}</code></p>
+    <p>این کلید را در تنظیمات سایت خود وارد کنید.</p>
+</body>
+</html>

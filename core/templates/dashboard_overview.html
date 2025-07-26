@@ -1,114 +1,214 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>داشبورد فروش</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Vazir', sans-serif; /* فونت فارسی مثل وزیر */
+        }
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .card-header {
+            background-color: #007bff;
+            color: white;
+            border-radius: 15px 15px 0 0;
+        }
+        .btn-primary {
+            border-radius: 10px;
+        }
+        .list-group-item {
+            border: none;
+            padding: 15px;
+            background-color: #fff;
+            margin-bottom: 10px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        .stats-box {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        @media (max-width: 768px) {
+            .stats-box {
+                margin-bottom: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container py-5">
+    <h1 class="text-center mb-4">داشبورد فروش</h1>
 
-{% block title %}داشبورد اصلی{% endblock %}
-
-{% block content %}
-<div class="content-header">
-    <h1>داشبورد اصلی</h1>
-</div>
-
-<!-- Date Filter Form -->
-<div class="card">
-    <form method="get" action="{% url 'core:dashboard_overview' %}" style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
-        <div>
-            <label for="start_date" style="font-size: 0.9em; margin-left: 5px;">از تاریخ:</label>
-            <input type="date" id="start_date" name="start_date" value="{{ start_date_str }}" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+    <!-- فیلتر تاریخ -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">فیلتر تاریخ</h5>
         </div>
-        <div>
-            <label for="end_date" style="font-size: 0.9em; margin-left: 5px;">تا تاریخ:</label>
-            <input type="date" id="end_date" name="end_date" value="{{ end_date_str }}" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
-        </div>
-        <button type="submit" style="padding: 10px 20px; background: var(--primary-color); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
-            <i class="fas fa-filter" style="margin-left: 5px;"></i> اعمال فیلتر
-        </button>
-        <a href="{% url 'core:dashboard_overview' %}" style="text-decoration: none; padding: 10px 15px; font-size: 0.9em;">پاک کردن فیلتر</a>
-    </form>
-</div>
-
-
-<!-- Stats Section -->
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 25px;">
-    <div class="card stat-card">
-        <div class="value">{{ total_views }}</div>
-        <div class="label">بازدید محصولات
-            <span style="display: block; font-size: 0.7em; margin-top: 4px;">
-                {% if is_custom_date_range %}(در بازه انتخابی){% else %}(۳۰ روز گذشته){% endif %}
-            </span>
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-center">
+                <div class="col-md-4">
+                    <label class="form-label">از تاریخ:</label>
+                    <input type="date" name="start_date" value="{{ start_date_str }}" class="form-control">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">تا تاریخ:</label>
+                    <input type="date" name="end_date" value="{{ end_date_str }}" class="form-control">
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">فیلتر</button>
+                </div>
+            </form>
         </div>
     </div>
-    <div class="card stat-card">
-        <div class="value">{{ total_add_to_cart }}</div>
-        <div class="label">افزودن به سبد
-             <span style="display: block; font-size: 0.7em; margin-top: 4px;">
-                {% if is_custom_date_range %}(در بازه انتخابی){% else %}(۳۰ روز گذشته){% endif %}
-            </span>
+
+    <!-- آمار کلی -->
+    <h2 class="mb-3">آمار کلی</h2>
+    <div class="row g-4 mb-4">
+        <div class="col-md-3 col-sm-6">
+            <div class="stats-box">
+                <h5>تعداد بازدید</h5>
+                <p class="fs-3 text-primary">{{ total_views }}</p>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="stats-box">
+                <h5>افزودن به سبد</h5>
+                <p class="fs-3 text-success">{{ total_carts }}</p>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="stats-box">
+                <h5>خرید نهایی</h5>
+                <p class="fs-3 text-danger">{{ total_purchases }}</p>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="stats-box">
+                <h5>نرخ تبدیل</h5>
+                <p class="fs-3 text-info">{{ overall_conversion }}%</p>
+            </div>
         </div>
     </div>
-    <div class="card stat-card">
-        <div class="value">{{ product_count }}</div>
-        <div class="label">کل محصولات ردیابی شده</div>
+
+    <!-- نمودار کلی -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">روند فعالیت‌ها</h5>
+        </div>
+        <div class="card-body">
+            <canvas id="overviewChart" height="100"></canvas>
+        </div>
     </div>
-</div>
 
-<!-- Main Content Grid -->
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 30px;">
+    <!-- محصولات محبوب -->
+    <h2 class="mb-3">محصولات محبوب</h2>
+    <div class="card mb-4">
+        <div class="card-body">
+            <ul class="list-group">
+                {% for product in popular_products %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <a href="{% url 'core:product_detail' product.id %}">{{ product.name }}</a>
+                    <span>
+                        بازدید: {{ product.views_count }} |
+                        سبد: {{ product.carts_count }} |
+                        خرید: {{ product.purchases_count }}
+                    </span>
+                </li>
+                {% empty %}
+                <li class="list-group-item text-center">محصولی یافت نشد</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
 
-    <!-- Popular Products -->
+    <!-- محصولات نیازمند توجه -->
+    <h2 class="mb-3">محصولات نیازمند توجه</h2>
+    <div class="card mb-4">
+        <div class="card-body">
+            <ul class="list-group">
+                {% for product in attention_products %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <a href="{% url 'core:product_detail' product.id %}">{{ product.name }}</a>
+                    <span>بازدید: {{ product.views_count }}، بدون افزودن به سبد</span>
+                </li>
+                {% empty %}
+                <li class="list-group-item text-center">محصولی یافت نشد</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <!-- پیشنهادات -->
+    <h2 class="mb-3">پیشنهادات هوشمند</h2>
     <div class="card">
-        <h3 style="color: #2980b9;"><i class="fas fa-star" style="margin-left: 10px;"></i>محصولات محبوب</h3>
-        <table>
-            {% for product in popular_products %}
-            <tr>
-                <td><a href="{% url 'core:product_detail' product.pk %}">{{ product.name }}</a></td>
-                <td style="text-align: left;">
-                    <strong title="افزودن به سبد">{{ product.carts_count }} <i class="fas fa-shopping-cart" style="color:#27ae60;"></i></strong> /
-                    <span title="بازدید" style="font-size: 0.9em; color: #777;">{{ product.views_count }} <i class="fas fa-eye"></i></span>
-                </td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="2" style="text-align: center; padding: 20px; color: #777;">داده‌ای در این بازه زمانی یافت نشد.</td></tr>
-            {% endfor %}
-        </table>
-    </div>
-
-    <!-- Attention Needed Products -->
-    <div class="card">
-        <h3 style="color: #c0392b;"><i class="fas fa-exclamation-triangle" style="margin-left: 10px;"></i>نیازمند توجه</h3>
-        <p style="font-size: 0.9em; color: #777; margin-top: -10px; margin-bottom: 20px;">محصولاتی با بازدید بالا و خرید کم</p>
-        <table>
-            {% for product in attention_products %}
-            <tr>
-                <td><a href="{% url 'core:product_detail' product.pk %}" style="color: #c0392b;">{{ product.name }}</a></td>
-                <td style="text-align: left;">
-                    <strong>{{ product.views_count }}</strong> بازدید / <strong>{{ product.carts_count }}</strong> سبد
-                </td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="2" style="text-align: center; padding: 20px; color: #777;">محصولی با این شرایط یافت نشد.</td></tr>
-            {% endfor %}
-        </table>
-    </div>
-</div>
-
-<!-- Recommendations -->
-<div class="card">
-    <h3 style="color: #27ae60;"><i class="fas fa-lightbulb" style="margin-left: 10px;"></i>آخرین پیشنهادهای هوشمند</h3>
-    {% for rec in recommendations %}
-        <div style="border-bottom: 1px solid #f0f0f0; padding: 15px 0; {% if forloop.last %}border:none;{% endif %}">
-            <p style="margin: 0; font-weight: bold;">
-                {% if rec.product %}
-                    <i class="fas fa-box-open" style="color: #3498db;"></i>
-                    برای محصول: <a href="{% url 'core:product_detail' rec.product.pk %}">{{ rec.product.name }}</a>
-                {% else %}
-                    <i class="fas fa-globe-americas" style="color: #2ecc71;"></i>
-                    پیشنهاد کلی برای سایت شما
-                {% endif %}
-            </p>
-            <p style="margin: 8px 0 10px;">{{ rec.text }}</p>
-            <small style="color: #7f8c8d; background: #f4f7f9; padding: 3px 8px; border-radius: 4px;">دلیل: {{ rec.get_reason_display }}</small>
+        <div class="card-body">
+            <ul class="list-group">
+                {% for rec in recommendations %}
+                <li class="list-group-item">
+                    {{ rec.text }}
+                    {% if rec.confidence_score %}
+                    <span class="badge bg-primary rounded-pill">امتیاز: {{ rec.confidence_score }}</span>
+                    {% endif %}
+                </li>
+                {% empty %}
+                <li class="list-group-item text-center">پیشنهادی موجود نیست</li>
+                {% endfor %}
+            </ul>
         </div>
-    {% empty %}
-        <p style="text-align: center; color: #777;">هنوز پیشنهادی برای شما تولید نشده است.</p>
-    {% endfor %}
+    </div>
 </div>
-{% endblock %}
+
+<!-- Bootstrap JS and Chart.js Script -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // نمودار کلی
+    const ctx = document.getElementById('overviewChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'], // باید از backend پر بشه
+            datasets: [
+                {
+                    label: 'بازدید',
+                    data: [/* باید از backend پر بشه */],
+                    borderColor: '#007bff',
+                    fill: false
+                },
+                {
+                    label: 'افزودن به سبد',
+                    data: [/* باید از backend پر بشه */],
+                    borderColor: '#28a745',
+                    fill: false
+                },
+                {
+                    label: 'خرید',
+                    data: [/* باید از backend پر بشه */],
+                    borderColor: '#dc3545',
+                    fill: false
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+</script>
+</body>
+</html>

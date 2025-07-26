@@ -1,6 +1,6 @@
-import random
+import requests
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import login
+from django.contrib.auth import login, logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -8,82 +8,17 @@ from datetime import datetime, timedelta
 from django.db.models import Count, Q
 from .forms import OTPRequestForm, OTPVerifyForm
 from .models import OTPCode, ApiKey, Product, ProductEvent, Recommendation
-from django.contrib.auth import logout as auth_logout
-
+from .utils import update_recommendations, fetch_product_data, predict_cart_abandonment
 import logging
+import random
+from django.http import JsonResponse
+from .utils import fetch_data_for_analysis, generate_ai_recommendations
 
 logger = logging.getLogger(__name__)
 
+AI_API_URL = "https://api.x.ai/v1/recommendations"  # آدرس API مدل هوش مصنوعی
+AI_API_KEY = "your-ai-api-key"  # کلید API (باید از x.ai/api دریافت شود)
 
-# ==============================================================================
-# >> بخش تحلیل و تولید پیشنهادها (نسخه نهایی و ضد خطا) <<
-# ==============================================================================
-
-def update_recommendations(user):
-    """
-    این تابع به صورت امن پیشنهادها را تولید و مدیریت می‌کند تا از ایجاد
-    رکورد تکراری و بروز خطای MultipleObjectsReturned جلوگیری شود.
-    """
-    thirty_days_ago = timezone.now() - timedelta(days=30)
-
-    # --- تحلیل تک تک محصولات ---
-    products = Product.objects.filter(owner=user)
-    for product in products:
-        events = product.events.filter(created_at__gte=thirty_days_ago)
-        views = events.filter(event_type='VIEW').count()
-        add_to_carts = events.filter(event_type='ADD_TO_CART').count()
-        conversion_rate = (add_to_carts / views * 100) if views > 0 else 0
-
-        current_reason, current_text = None, None
-
-        if views > 50 and conversion_rate > 5:
-            current_reason, current_text = 'POPULAR_ITEM', f"دمت گرم! محصول '{product.name}' حسابی محبوبه. روی تبلیغاتش بیشتر کار کن."
-        elif views > 30 and conversion_rate < 1:
-            current_reason, current_text = 'HIGH_VIEW_LOW_ADD', f"رفیق، خیلیا میان سراغ '{product.name}' ولی نمی‌خرن. قیمت، عکس‌ها و توضیحاتش رو یه بازبینی کن."
-        elif views < 10 and product.created_at < timezone.now() - timedelta(days=7):
-            current_reason, current_text = 'LOW_VIEW', f"انگار محصول '{product.name}' خوب دیده نشده. توی صفحه اصلی یا شبکه‌های اجتماعی معرفیش کن."
-
-        if current_reason and current_text:
-            # ۱. ابتدا پیشنهاد درست را ایجاد یا آپدیت می‌کنیم و مطمئن می‌شویم فعال است.
-            rec_obj, created = Recommendation.objects.update_or_create(
-                owner=user,
-                product=product,
-                reason=current_reason,
-                defaults={'text': current_text, 'is_active': True}
-            )
-            # ۲. سپس، تمام پیشنهادهای *دیگر* برای این محصول را غیرفعال می‌کنیم.
-            product.core_recommendations.exclude(pk=rec_obj.pk).update(is_active=False)
-        else:
-            # اگر محصول دیگر شرایط هیچ پیشنهادی را ندارد، همه را غیرفعال کن.
-            product.core_recommendations.update(is_active=False)
-
-    # --- تحلیل کلی سایت ---
-    all_events = ProductEvent.objects.filter(product__owner=user, created_at__gte=thirty_days_ago)
-    total_views = all_events.filter(event_type='VIEW').count()
-    total_carts = all_events.filter(event_type='ADD_TO_CART').count()
-    overall_conversion = (total_carts / total_views * 100) if total_views > 0 else 0
-
-    general_reason, general_text = None, None
-    if total_views > 100 and overall_conversion < 1:
-        general_reason, general_text = 'HIGH_VIEW_LOW_ADD', "بازدید کلی سایتت خوبه اما نرخ تبدیل پایینه! شاید بهتر باشه فرایند پرداخت یا هزینه‌های ارسال رو بازبینی کنی."
-    elif total_views < 50 and products.exists():
-        general_reason, general_text = 'LOW_VIEW', "بازدید کلی سایت کمه. روی سئو و تبلیغات عمومی بیشتر کار کن تا مشتری‌های جدید پیدات کنن."
-
-    if general_reason and general_text:
-        rec_obj, created = Recommendation.objects.update_or_create(
-            owner=user,
-            product__isnull=True,
-            reason=general_reason,
-            defaults={'text': general_text, 'is_active': True}
-        )
-        Recommendation.objects.filter(owner=user, product__isnull=True).exclude(pk=rec_obj.pk).update(is_active=False)
-    else:
-        Recommendation.objects.filter(owner=user, product__isnull=True).update(is_active=False)
-
-
-# ==============================================================================
-# >> بقیه ویوها بدون تغییر باقی می‌مانند <<
-# ==============================================================================
 
 @login_required
 def dashboard_overview_view(request):
@@ -100,35 +35,50 @@ def dashboard_overview_view(request):
         end_date = timezone.now()
         start_date = end_date - timedelta(days=29)
 
-    if not request.GET.get('start_date'):
-        update_recommendations(user)
+    # به‌روزرسانی پیشنهادات
+    update_recommendations(user, start_date, end_date)
 
     products = Product.objects.filter(owner=user)
     all_events = ProductEvent.objects.filter(product__in=products, created_at__range=(start_date, end_date))
     total_views = all_events.filter(event_type='VIEW').count()
-    total_add_to_cart = all_events.filter(event_type='ADD_TO_CART').count()
+    total_carts = all_events.filter(event_type='ADD_TO_CART').count()
+    total_purchases = all_events.filter(event_type='PURCHASE').count()
+    overall_conversion = (total_carts / total_views * 100) if total_views > 0 else 0
+    overall_purchase_rate = (total_purchases / total_views * 100) if total_views > 0 else 0
 
     date_filter = Q(events__created_at__range=(start_date, end_date))
     views_in_range = Count('events', filter=Q(events__event_type='VIEW') & date_filter)
     carts_in_range = Count('events', filter=Q(events__event_type='ADD_TO_CART') & date_filter)
+    purchases_in_range = Count('events', filter=Q(events__event_type='PURCHASE') & date_filter)
 
     popular_products = products.annotate(
         views_count=views_in_range,
-        carts_count=carts_in_range
-    ).order_by('-carts_count', '-views_count')[:5]
+        carts_count=carts_in_range,
+        purchases_count=purchases_in_range
+    ).order_by('-purchases_count', '-carts_count', '-views_count')[:5]
 
     attention_products = products.annotate(
         views_count=views_in_range,
         carts_count=carts_in_range
     ).filter(views_count__gt=20, carts_count=0).order_by('-views_count')[:5]
 
-    latest_recommendations = Recommendation.objects.filter(owner=user, is_active=True).order_by('-created_at')[:5]
+    latest_recommendations = Recommendation.objects.filter(
+        owner=user, is_active=True
+    ).order_by('-created_at', '-confidence_score')[:10]
 
     context = {
-        'total_views': total_views, 'total_add_to_cart': total_add_to_cart, 'product_count': products.count(),
-        'popular_products': popular_products, 'attention_products': attention_products,
-        'recommendations': latest_recommendations, 'start_date_str': start_date.strftime('%Y-%m-%d'),
-        'end_date_str': end_date.strftime('%Y-%m-%d'), 'is_custom_date_range': 'start_date' in request.GET,
+        'total_views': total_views,
+        'total_carts': total_carts,
+        'total_purchases': total_purchases,
+        'overall_conversion': f"{overall_conversion:.2f}",
+        'overall_purchase_rate': f"{overall_purchase_rate:.2f}",
+        'product_count': products.count(),
+        'popular_products': popular_products,
+        'attention_products': attention_products,
+        'recommendations': latest_recommendations,
+        'start_date_str': start_date.strftime('%Y-%m-%d'),
+        'end_date_str': end_date.strftime('%Y-%m-%d'),
+        'is_custom_date_range': 'start_date' in request.GET,
     }
     return render(request, 'dashboard_overview.html', context)
 
@@ -147,7 +97,7 @@ def request_otp_view(request):
             OTPCode.objects.filter(user=user).delete()
             OTPCode.objects.create(user=user, code=code)
             request.session['otp_phone_number'] = phone_number
-            logger.info(f"OTP sent: phone={phone_number}, {code}, user_created={created}")
+            logger.info(f"OTP sent: phone={phone_number}, code={code}, user_created={created}")
             return redirect('core:verify_otp')
         else:
             logger.warning(f"Invalid OTP request form: errors={form.errors}")
@@ -207,26 +157,148 @@ def product_detail_view(request, pk):
     thirty_days_ago = timezone.now() - timedelta(days=30)
     views_30_days = product.events.filter(event_type='VIEW', created_at__gte=thirty_days_ago).count()
     carts_30_days = product.events.filter(event_type='ADD_TO_CART', created_at__gte=thirty_days_ago).count()
+    purchases_30_days = product.events.filter(event_type='PURCHASE', created_at__gte=thirty_days_ago).count()
     conversion_rate = (carts_30_days / views_30_days * 100) if views_30_days > 0 else 0
+    purchase_rate = (purchases_30_days / views_30_days * 100) if views_30_days > 0 else 0
 
-    chart_labels, chart_views = [], []
+    chart_labels, chart_views, chart_carts, chart_purchases = [], [], [], []
     today = timezone.now()
     for i in range(6, -1, -1):
         day = today - timedelta(days=i)
-        count = product.events.filter(event_type='VIEW', created_at__date=day.date()).count()
+        views_count = product.events.filter(event_type='VIEW', created_at__date=day.date()).count()
+        carts_count = product.events.filter(event_type='ADD_TO_CART', created_at__date=day.date()).count()
+        purchases_count = product.events.filter(event_type='PURCHASE', created_at__date=day.date()).count()
         chart_labels.append(day.strftime('%A'))
-        chart_views.append(count)
+        chart_views.append(views_count)
+        chart_carts.append(carts_count)
+        chart_purchases.append(purchases_count)
 
-    product_recommendations = product.core_recommendations.filter(is_active=True)
+    product_recommendations = product.core_recommendations.filter(is_active=True).order_by('-confidence_score')
 
     context = {
-        'product': product, 'views_30_days': views_30_days, 'carts_30_days': carts_30_days,
-        'conversion_rate': f"{conversion_rate:.2f}", 'chart_labels': chart_labels, 'chart_views': chart_views,
+        'product': product,
+        'views_30_days': views_30_days,
+        'carts_30_days': carts_30_days,
+        'purchases_30_days': purchases_30_days,
+        'conversion_rate': f"{conversion_rate:.2f}",
+        'purchase_rate': f"{purchase_rate:.2f}",
+        'chart_labels': chart_labels,
+        'chart_views': chart_views,
+        'chart_carts': chart_carts,
+        'chart_purchases': chart_purchases,
         'recommendations': product_recommendations
     }
     return render(request, 'product_detail.html', context)
 
 
+@login_required
+def request_ai_recommendation(request, pk):
+    """درخواست پیشنهادات هوش مصنوعی برای یک محصول خاص"""
+    product = get_object_or_404(Product, pk=pk, owner=request.user)
+    thirty_days_ago = timezone.now() - timedelta(days=30)
+
+    # جمع‌آوری داده‌های محصول
+    product_data = fetch_product_data(product, thirty_days_ago, timezone.now())
+
+    # درخواست پیشنهادات از API هوش مصنوعی
+    generate_ai_recommendations(request.user, product_data)
+
+    # گرفتن پیشنهادات جدید
+    recommendations = product.core_recommendations.filter(
+        is_active=True, reason='AI_GENERATED'
+    ).order_by('-confidence_score')
+
+    # آماده‌سازی داده‌ها برای پاسخ JSON
+    recommendations_data = [
+        {'text': rec.text, 'confidence_score': rec.confidence_score}
+        for rec in recommendations
+    ]
+
+    return JsonResponse({'recommendations': recommendations_data})
+
+
+@login_required
+def product_abandonment_view(request, pk):
+    product = get_object_or_404(Product, pk=pk, owner=request.user)
+    thirty_days_ago = timezone.now() - timedelta(days=30)
+    abandonment_score, suggestion = predict_cart_abandonment(request.user, product, thirty_days_ago, timezone.now())
+    context = {
+        'product': product,
+        'abandonment_score': f"{abandonment_score:.2f}",
+        'suggestion': suggestion,
+        'error': None if abandonment_score else "خطا در دریافت پیش‌بینی ترک سبد خرید. لطفاً بعداً تلاش کنید."
+    }
+    return render(request, 'product_abandonment.html', context)
+
+
+# تحلیل رقبا
+@login_required
+def competitor_comparison_view(request, pk):
+    product = get_object_or_404(Product, pk=pk, owner=request.user)
+    try:
+        headers = {'Authorization': f'Bearer {AI_API_KEY}'}
+        response = requests.get(f"{AI_API_URL}/competitor_data", json={'product_name': product.name}, headers=headers)
+        competitor_data = response.json().get('competitors', [])
+    except requests.RequestException:
+        competitor_data = []
+    context = {'product': product, 'competitor_data': competitor_data}
+    return render(request, 'competitor_comparison.html', context)
+
+
+# Chat_with AI
+@login_required
+def ai_chat_recommendation(request, pk):
+    product = get_object_or_404(Product, pk=pk, owner=request.user)
+    if request.method == 'POST':
+        question = request.POST.get('question')
+        product_data = fetch_product_data(product, timezone.now() - timedelta(days=30), timezone.now())
+        try:
+            headers = {'Authorization': f'Bearer {AI_API_KEY}', 'Content-Type': 'application/json'}
+            response = requests.post(f"{AI_API_URL}/chat", json={'question': question, 'product': product_data},
+                                     headers=headers)
+            response.raise_for_status()
+            answer = response.json().get('answer', 'پاسخی دریافت نشد.')
+        except requests.RequestException:
+            answer = 'خطا در دریافت پاسخ از هوش مصنوعی.'
+        return JsonResponse({'answer': answer})
+    return JsonResponse({'error': 'فقط درخواست‌های POST مجاز هستند'}, status=400)
+
+
+# دانلود با PDF
+@login_required
+def product_report_pdf(request, pk):
+    product = get_object_or_404(Product, pk=pk, owner=request.user)
+    thirty_days_ago = timezone.now() - timedelta(days=30)
+    product_data = fetch_product_data(product, thirty_days_ago, timezone.now())
+    recommendations = product.core_recommendations.filter(is_active=True).order_by('-confidence_score')
+
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="report_{product.name}.pdf"'
+
+    p = canvas.Canvas(response, pagesize=A4)
+    pdfmetrics.registerFont(TTFont('Vazir', 'path/to/Vazir.ttf'))  # مسیر فونت Vazir
+    p.setFont('Vazir', 12)
+
+    y = 800
+    p.drawString(100, y, f"گزارش محصول: {product.name}")
+    y -= 30
+    p.drawString(100, y, f"بازدید 30 روز: {product_data['views']}")
+    y -= 20
+    p.drawString(100, y, f"افزودن به سبد: {product_data['carts']}")
+    y -= 20
+    p.drawString(100, y, f"خرید: {product_data['purchases']}")
+    y -= 20
+    p.drawString(100, y, f"نرخ تبدیل: {product_data['conversion_rate']:.2f}%")
+    y -= 30
+    p.drawString(100, y, "پیشنهادات:")
+    for rec in recommendations:
+        y -= 20
+        p.drawString(100, y, f"- {rec.text} ({'هوش مصنوعی' if rec.reason == 'AI_GENERATED' else 'تحلیل سیستم'})")
+    p.showPage()
+    p.save()
+    return response
+
+
 def logout(request):
     auth_logout(request)
-    return redirect('core:request_otp')  #
+    return redirect('core:request_otp')
