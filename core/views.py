@@ -17,7 +17,8 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import datetime, timedelta
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum, F, ExpressionWrapper, fields, Case, When
+from django.db.models.functions import TruncDate
 from matplotlib import pyplot as plt
 from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import A4
@@ -29,9 +30,12 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 from rest_framework.utils import json
+import csv
+import numpy as np
 
 from .forms import OTPRequestForm, OTPVerifyForm
-from .models import OTPCode, ApiKey, Product, ProductEvent, Recommendation, UserSite
+from .models import OTPCode, ApiKey, Product, ProductEvent, Recommendation, \
+    UserSite  # توجه: ممکن است نیاز به افزودن مدل Webhook داشته باشید
 from .utils import update_recommendations, fetch_product_data, predict_cart_abandonment
 import logging
 import random
@@ -43,8 +47,8 @@ from django.views.decorators.http import require_POST
 
 logger = logging.getLogger(__name__)
 
-AI_API_URL = "https://api.x.ai/v1/recommendations"  # آدرس API مدل هوش مصنوعی
-AI_API_KEY = "your-ai-api-key"  # کلید API (باید از x.ai/api دریافت شود)
+AI_API_URL = "https://api.x.ai/v1/recommendations"
+AI_API_KEY = "your-ai-api-key"
 
 
 @login_required
@@ -62,7 +66,6 @@ def dashboard_overview_view(request):
         end_date = timezone.now()
         start_date = end_date - timedelta(days=29)
 
-    # به‌روزرسانی پیشنهادات
     update_recommendations(user, start_date, end_date)
 
     products = Product.objects.filter(owner=user)
@@ -220,27 +223,17 @@ def product_detail_view(request, pk):
 
 @login_required
 def request_ai_recommendation(request, pk):
-    """درخواست پیشنهادات هوش مصنوعی برای یک محصول خاص"""
     product = get_object_or_404(Product, pk=pk, owner=request.user)
     thirty_days_ago = timezone.now() - timedelta(days=30)
-
-    # جمع‌آوری داده‌های محصول
     product_data = fetch_product_data(product, thirty_days_ago, timezone.now())
-
-    # درخواست پیشنهادات از API هوش مصنوعی
     generate_ai_recommendations(request.user, product_data)
-
-    # گرفتن پیشنهادات جدید
     recommendations = product.core_recommendations.filter(
         is_active=True, reason='AI_GENERATED'
     ).order_by('-confidence_score')
-
-    # آماده‌سازی داده‌ها برای پاسخ JSON
     recommendations_data = [
         {'text': rec.text, 'confidence_score': rec.confidence_score}
         for rec in recommendations
     ]
-
     return JsonResponse({'recommendations': recommendations_data})
 
 
@@ -258,7 +251,6 @@ def product_abandonment_view(request, pk):
     return render(request, 'product_abandonment.html', context)
 
 
-# تحلیل رقبا
 @login_required
 def competitor_comparison_view(request, pk):
     product = get_object_or_404(Product, pk=pk, owner=request.user)
@@ -272,7 +264,6 @@ def competitor_comparison_view(request, pk):
     return render(request, 'competitor_comparison.html', context)
 
 
-# Chat_with AI
 @login_required
 def ai_chat_recommendation(request, pk):
     product = get_object_or_404(Product, pk=pk, owner=request.user)
@@ -292,7 +283,6 @@ def ai_chat_recommendation(request, pk):
 
 
 def prepare_rtl_text(text):
-    """آماده‌سازی متن برای نمایش صحیح در PDF"""
     reshaped_text = arabic_reshaper.reshape(text)
     return get_display(reshaped_text)
 
@@ -300,8 +290,6 @@ def prepare_rtl_text(text):
 @login_required
 def product_report_pdf(request, pk):
     product = get_object_or_404(Product, pk=pk, owner=request.user)
-
-    # ۱. داده‌ها
     thirty_days_ago = timezone.now() - timedelta(days=30)
     views_30_days = product.events.filter(event_type='VIEW', created_at__gte=thirty_days_ago).count()
     carts_30_days = product.events.filter(event_type='ADD_TO_CART', created_at__gte=thirty_days_ago).count()
@@ -309,7 +297,6 @@ def product_report_pdf(request, pk):
     conversion_rate = (carts_30_days / views_30_days * 100) if views_30_days > 0 else 0
     purchase_rate = (purchases_30_days / views_30_days * 100) if views_30_days > 0 else 0
 
-    # آمار هفتگی
     today = timezone.now()
     chart_labels_fa = []
     chart_views, chart_carts, chart_purchases = [], [], []
@@ -326,15 +313,12 @@ def product_report_pdf(request, pk):
 
     recommendations = product.core_recommendations.filter(is_active=True).order_by('-confidence_score')
 
-    # ۲. ساخت نمودار
     fig, ax = plt.subplots(figsize=(10, 5))
     bar_width = 0.25
     index = range(len(chart_labels_fa))
-
     ax.bar([i - bar_width for i in index], chart_views, bar_width, label='بازدید', color='#4e73df')
     ax.bar(index, chart_carts, bar_width, label='سبد خرید', color='#1cc88a')
     ax.bar([i + bar_width for i in index], chart_purchases, bar_width, label='خرید', color='#e74a3b')
-
     ax.set_ylabel('تعداد رویداد')
     ax.set_title('آمار عملکرد در ۷ روز گذشته')
     ax.set_xticks(list(index))
@@ -342,51 +326,33 @@ def product_report_pdf(request, pk):
     ax.legend()
     fig.tight_layout()
 
-    # ذخیره نمودار در حافظه
     buffer = io.BytesIO()
     plt.savefig(buffer, format='png', dpi=300)
     buffer.seek(0)
     plt.close(fig)
 
-    # ۳. تولید PDF
     response = HttpResponse(content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="report_{product.name}.pdf"'
-
     p = canvas.Canvas(response, pagesize=A4)
     width, height = A4
-
-    # فونت فارسی
     font_path = os.path.join(settings.BASE_DIR, 'core', 'static', 'fonts', 'Vazirmatn-Black.ttf')
     pdfmetrics.registerFont(TTFont('Vazir', font_path))
-
-    # استایل‌ها
     styles = getSampleStyleSheet()
-    style_right = ParagraphStyle(
-        name='PersianRight',
-        parent=styles['Normal'],
-        fontName='Vazir',
-        alignment=TA_RIGHT,
-        fontSize=12,
-        leading=20
-    )
+    style_right = ParagraphStyle(name='PersianRight', parent=styles['Normal'], fontName='Vazir', alignment=TA_RIGHT,
+                                 fontSize=12, leading=20)
     style_title = ParagraphStyle(name='PersianTitle', parent=style_right, fontSize=18, leading=30)
 
-    # شروع
     y = height - 1.5 * cm
     margin_right = width - 2 * cm
-
-    # عنوان
     title = prepare_rtl_text(f"گزارش جامع محصول: {product.name}")
     p.setFont('Vazir', 18)
     p.drawRightString(margin_right, y, title)
     y -= 1.5 * cm
 
-    # آمار کلی
     stats_title = prepare_rtl_text("آمار کلیدی (۳۰ روز گذشته)")
     p.setFont('Vazir', 14)
     p.drawRightString(margin_right, y, stats_title)
     y -= 1 * cm
-
     stats_text = f"""
     تعداد بازدید: {views_30_days}<br/>
     تعداد افزودن به سبد خرید: {carts_30_days}<br/>
@@ -399,41 +365,34 @@ def product_report_pdf(request, pk):
     stats_paragraph.drawOn(p, 2 * cm, y - stats_paragraph.height)
     y -= (stats_paragraph.height + 1 * cm)
 
-    # نمودار
     chart_title = prepare_rtl_text("نمودار عملکرد هفتگی")
     p.setFont('Vazir', 14)
     p.drawRightString(margin_right, y, chart_title)
     y -= 7 * cm
-
     image = ImageReader(buffer)
     p.drawImage(image, x=1.5 * cm, y=y, width=18 * cm, height=6 * cm, preserveAspectRatio=True)
     buffer.close()
     y -= 1 * cm
 
-    # پیشنهادات
     recommendations_title = prepare_rtl_text("پیشنهادات بهبود")
     p.setFont('Vazir', 14)
     p.drawRightString(margin_right, y, recommendations_title)
     y -= 1 * cm
-
     if recommendations:
         for rec in recommendations:
             rec_type = 'هوش مصنوعی' if rec.reason == 'AI_GENERATED' else 'تحلیل سیستم'
             text = f"- {rec.text} <b>(نوع: {rec_type} | اطمینان: {rec.confidence_score:.0%})</b>"
             paragraph = Paragraph(prepare_rtl_text(text), style_right)
             paragraph.wrapOn(p, width - 4 * cm, height)
-
             if y - paragraph.height < 1.5 * cm:
                 p.showPage()
                 p.setFont('Vazir', 12)
                 y = height - 1.5 * cm
-
             paragraph.drawOn(p, 2 * cm, y - paragraph.height)
             y -= (paragraph.height + 0.2 * cm)
     else:
         no_rec = prepare_rtl_text("در حال حاضر پیشنهاد فعالی برای این محصول وجود ندارد.")
         p.drawRightString(margin_right - 1 * cm, y, no_rec)
-
     p.showPage()
     p.save()
     return response
@@ -464,7 +423,6 @@ def tracking_script_view(request):
             }).catch(error => console.error('Error sending event:', error));
         }
 
-        // ردیابی بازدید صفحه محصول
         if (window.location.pathname.includes('/product/')) {
             var product = {
                 id: document.querySelector('[data-product-id]')?.dataset.productId || window.location.pathname.split('/').pop(),
@@ -475,7 +433,6 @@ def tracking_script_view(request):
             sendEvent('VIEW', product);
         }
 
-        // ردیابی افزودن به سبد خرید
         document.addEventListener('click', function(e) {
             if (e.target.closest('[data-add-to-cart]') || e.target.classList.contains('add-to-cart')) {
                 var product = {
@@ -488,7 +445,6 @@ def tracking_script_view(request):
             }
         });
 
-        // ردیابی خرید
         if (window.location.pathname.includes('/checkout/success') || window.location.pathname.includes('/thank-you')) {
             var products = Array.from(document.querySelectorAll('[data-purchase-item]')).map(item => ({
                 id: item.dataset.productId || item.id,
@@ -503,6 +459,37 @@ def tracking_script_view(request):
     return HttpResponse(js_content, content_type='application/javascript')
 
 
+def send_purchase_webhook(product_event):
+    """
+    تابع کمکی برای ارسال اطلاعات خرید به یک سرویس خارجی از طریق Webhook.
+    این تابع باید پس از ثبت رویداد خرید فراخوانی شود.
+    برای این بخش نیاز به مدلی برای ذخیره URL های Webhook دارید.
+    """
+    user = product_event.product.owner
+    # webhooks = Webhook.objects.filter(owner=user, event_type='PURCHASE', is_active=True)
+
+    # کد زیر به صورت شبیه‌سازی شده است (در عمل باید از دیتابیس خوانده شود)
+    webhooks = []  # مثال: [{'target_url': 'https://example.com/webhook-receiver'}]
+
+    if not webhooks:
+        return
+
+    payload = {
+        'product_name': product_event.product.name,
+        'product_id': product_event.product.id,
+        'price': float(product_event.product.price),
+        'purchase_time': product_event.created_at.isoformat(),
+        'customer_id': user.username
+    }
+
+    for webhook in webhooks:
+        try:
+            requests.post(webhook.get('target_url'), json=payload, timeout=5)
+            logger.info(f"Webhook sent for purchase of {product_event.product.name} to {webhook.get('target_url')}")
+        except requests.RequestException as e:
+            logger.error(f"Failed to send webhook to {webhook.get('target_url')}: {e}")
+
+
 @csrf_exempt
 @require_POST
 def track_event_view(request):
@@ -510,13 +497,11 @@ def track_event_view(request):
     if not api_key:
         logger.warning("Track event: No API Key provided")
         return JsonResponse({'error': 'API Key required'}, status=401)
-
     try:
-        site = UserSite.objects.get(api_key=api_key, is_active=True)
+        site = UserSite.objects.get(api_key__key=api_key, is_active=True)
     except UserSite.DoesNotExist:
         logger.warning(f"Track event: Invalid or inactive API Key: {api_key}")
         return JsonResponse({'error': 'Invalid or inactive API Key'}, status=401)
-
     try:
         data = json.loads(request.body)
         event_type = data['event_type']
@@ -525,32 +510,30 @@ def track_event_view(request):
     except (json.JSONDecodeError, KeyError) as e:
         logger.error(f"Track event: Invalid data - {str(e)}")
         return JsonResponse({'error': 'Invalid data'}, status=400)
-
     if event_type not in ['VIEW', 'ADD_TO_CART', 'PURCHASE']:
         logger.warning(f"Track event: Invalid event type: {event_type}")
         return JsonResponse({'error': 'Invalid event type'}, status=400)
 
-    # ایجاد یا به‌روزرسانی محصول
-    product, created = Product.objects.get_or_create(
-        site=site,
+    product, created = Product.objects.update_or_create(
         owner=site.owner,
-        page_url=product_data['url'],
+        product_id_from_site=product_data['id'],
         defaults={
             'name': product_data.get('name', 'محصول ناشناس'),
             'price': Decimal(str(product_data.get('price', 0))),
-            'stock': 100,  # پیش‌فرض
-            'discount': 0,
-            'category': '',
-            'image_url': ''
+            'page_url': product_data['url'],
+            'category': product_data.get('category', 'عمومی')
         }
     )
 
-    # ایجاد رویداد
-    ProductEvent.objects.create(
+    event = ProductEvent.objects.create(
         product=product,
         event_type=event_type,
         created_at=timestamp or timezone.now()
     )
+
+    # فراخوانی وب‌هوک در صورت ثبت خرید
+    if event.event_type == 'PURCHASE':
+        send_purchase_webhook(event)
 
     logger.info(f"Event tracked: {event_type} for product {product.name} on site {site.site_url}")
     return JsonResponse({'status': 'success'})
@@ -559,7 +542,7 @@ def track_event_view(request):
 @login_required
 def send_dashboard_link_view(request):
     user = request.user
-    dashboard_url = 'http://127.0.0.1:8000/dashboard/'  # جایگزین با دامنه واقعی
+    dashboard_url = request.build_absolute_uri(redirect('core:dashboard_overview').url)
     try:
         send_mail(
             subject='لینک پنل تحلیل فروشگاه شما',
@@ -580,3 +563,236 @@ def send_dashboard_link_view(request):
 def logout(request):
     auth_logout(request)
     return redirect('core:request_otp')
+
+
+# ===================================================================
+# ===== بخش جدید: ویژگی‌های اضافه شده بر اساس درخواست شما =====
+# ===================================================================
+
+# بخش جدید: داشبورد پیشرفته با قابلیت‌های بیشتر
+@login_required
+def advanced_dashboard_view(request):
+    """
+    این ویو یک داشبورد پیشرفته‌تر با کارت‌های اطلاعاتی جدید و خلاصه‌ای از تحلیل‌ها ارائه می‌دهد.
+    """
+    user = request.user
+    end_date_str = request.GET.get('end_date', timezone.now().strftime('%Y-%m-%d'))
+    start_date_str = request.GET.get('start_date', (timezone.now() - timedelta(days=29)).strftime('%Y-%m-%d'))
+
+    try:
+        end_date = timezone.make_aware(
+            datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59))
+        start_date = timezone.make_aware(datetime.strptime(start_date_str, '%Y-%m-%d'))
+    except (ValueError, TypeError):
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=29)
+
+    products = Product.objects.filter(owner=user)
+    all_events = ProductEvent.objects.filter(product__in=products, created_at__range=(start_date, end_date))
+    total_purchases = all_events.filter(event_type='PURCHASE').count()
+    total_revenue = all_events.filter(event_type='PURCHASE').aggregate(
+        total=Sum('product__price')
+    )['total'] or Decimal('0.00')
+
+    total_categories = products.values('category').distinct().count()
+    low_stock_products_count = products.filter(stock__lt=10, stock__gt=0).count()
+    out_of_stock_products_count = products.filter(stock=0).count()
+
+    context = {
+        'total_revenue': f"{total_revenue:.2f}",
+        'total_purchases': total_purchases,
+        'total_categories': total_categories,
+        'low_stock_products_count': low_stock_products_count,
+        'out_of_stock_products_count': out_of_stock_products_count,
+        'product_count': products.count(),
+        'start_date_str': start_date.strftime('%Y-%m-%d'),
+        'end_date_str': end_date.strftime('%Y-%m-%d'),
+        'is_custom_date_range': 'start_date' in request.GET,
+    }
+    return render(request, 'advanced_dashboard.html', context)
+
+
+# بخش جدید: تحلیل دسته‌بندی‌ها و پیش‌بینی فروش
+@login_required
+def category_analysis_view(request):
+    """
+    این ویو عملکرد هر دسته‌بندی را تحلیل کرده و فروش آینده را به صورت ساده پیش‌بینی می‌کند.
+    """
+    user = request.user
+    end_date = timezone.now()
+    start_date = end_date - timedelta(days=29)
+
+    category_data = Product.objects.filter(owner=user).values('category').annotate(
+        total_products=Count('id'),
+        total_purchases=Count('events', filter=Q(events__event_type='PURCHASE',
+                                                 events__created_at__range=(start_date, end_date))),
+        total_revenue=Sum('events__product__price',
+                          filter=Q(events__event_type='PURCHASE', events__created_at__range=(start_date, end_date)))
+    ).order_by('-total_revenue')
+
+    top_category = category_data.first()
+    forecast_data = None
+    if top_category and top_category['category']:
+        daily_sales = ProductEvent.objects.filter(
+            product__owner=user,
+            product__category=top_category['category'],
+            event_type='PURCHASE',
+            created_at__gte=start_date
+        ).annotate(day=TruncDate('created_at')).values('day').annotate(
+            daily_sales_count=Count('id')
+        ).order_by('day')
+
+        if len(daily_sales) >= 7:
+            last_7_days_sales = [s['daily_sales_count'] for s in daily_sales[len(daily_sales) - 7:]]
+            avg_sales = np.mean(last_7_days_sales) if last_7_days_sales else 0
+            forecast_data = {
+                'category_name': top_category['category'],
+                'next_7_days_prediction': int(avg_sales * 7)
+            }
+
+    context = {
+        'category_data': category_data,
+        'forecast_data': forecast_data,
+        'start_date': start_date,
+        'end_date': end_date
+    }
+    return render(request, 'category_analysis.html', context)
+
+
+# بخش جدید: نمایش و مرتب‌سازی محصولات بر اساس معیارها
+@login_required
+def product_list_sorted_view(request):
+    """
+    این ویو به کاربر اجازه می‌دهد محصولات را بر اساس معیارهای مختلف مشاهده و مرتب کند.
+    """
+    user = request.user
+    sort_by = request.GET.get('sort_by', '-created_at')
+
+    products_qs = Product.objects.filter(owner=user)
+
+    if sort_by == 'highest_discount':
+        products = products_qs.order_by('-discount')
+    elif sort_by == 'most_purchased':
+        products = products_qs.annotate(
+            purchase_count=Count('events', filter=Q(events__event_type='PURCHASE'))).order_by('-purchase_count')
+    elif sort_by == 'lowest_stock':
+        products = products_qs.order_by('stock')
+    elif sort_by == 'highest_price':
+        products = products_qs.order_by('-price')
+    elif sort_by == 'lowest_price':
+        products = products_qs.order_by('price')
+    else:
+        products = products_qs.order_by('-created_at')
+
+    context = {
+        'products': products,
+        'current_sort': sort_by
+    }
+    return render(request, 'product_list_sorted.html', context)
+
+
+# بخش جدید: API برای نمودارهای تعاملی (مثال: نمودار فروش روزانه)
+@login_required
+def daily_sales_chart_api(request):
+    """
+    این ویو داده‌های فروش روزانه را در فرمت JSON برای استفاده در نمودارهای JavaScript فراهم می‌کند.
+    """
+    user = request.user
+    end_date_str = request.GET.get('end_date', timezone.now().strftime('%Y-%m-%d'))
+    start_date_str = request.GET.get('start_date', (timezone.now() - timedelta(days=29)).strftime('%Y-%m-%d'))
+
+    try:
+        end_date = timezone.make_aware(
+            datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59))
+        start_date = timezone.make_aware(datetime.strptime(start_date_str, '%Y-%m-%d'))
+    except (ValueError, TypeError):
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=29)
+
+    sales_data = ProductEvent.objects.filter(
+        product__owner=user,
+        event_type='PURCHASE',
+        created_at__range=(start_date, end_date)
+    ).annotate(
+        day=TruncDate('created_at')
+    ).values('day').annotate(
+        total_sales=Sum('product__price'),
+        count=Count('id')
+    ).order_by('day')
+
+    labels = [item['day'].strftime('%Y-%m-%d') for item in sales_data]
+    revenue_data = [float(item['total_sales']) for item in sales_data]
+    count_data = [item['count'] for item in sales_data]
+
+    data = {
+        'labels': labels,
+        'revenue_data': revenue_data,
+        'count_data': count_data,
+    }
+    return JsonResponse(data)
+
+
+# بخش جدید: مرکز اعلان‌ها
+@login_required
+def notifications_view(request):
+    """
+    این ویو اعلان‌های مهم مانند اتمام موجودی یا نیاز به توجه را به کاربر نمایش می‌دهد.
+    """
+    user = request.user
+
+    out_of_stock_products = Product.objects.filter(owner=user, stock=0)
+    low_stock_products = Product.objects.filter(owner=user, stock__gt=0, stock__lt=10)
+
+    thirty_days_ago = timezone.now() - timedelta(days=30)
+    attention_products = Product.objects.filter(owner=user).annotate(
+        views_count=Count('events', filter=Q(events__event_type='VIEW', events__created_at__gte=thirty_days_ago)),
+        carts_count=Count('events', filter=Q(events__event_type='ADD_TO_CART', events__created_at__gte=thirty_days_ago))
+    ).filter(views_count__gt=50, carts_count=0).order_by('-views_count')
+
+    context = {
+        'out_of_stock_products': out_of_stock_products,
+        'low_stock_products': low_stock_products,
+        'attention_products': attention_products,
+    }
+    return render(request, 'notifications.html', context)
+
+
+# بخش جدید: گزارش‌های قابل دانلود (مثال: گزارش فروش در فرمت CSV)
+@login_required
+def download_sales_report_csv(request):
+    """
+    این ویو یک گزارش کامل از رویدادهای فروش در بازه زمانی مشخص را در قالب فایل CSV ارائه می‌دهد.
+    """
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+    response['Content-Disposition'] = 'attachment; filename="sales_report.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(['نام محصول', 'دسته بندی', 'قیمت', 'نوع رویداد', 'تاریخ و زمان'])
+
+    user = request.user
+    end_date_str = request.GET.get('end_date', timezone.now().strftime('%Y-%m-%d'))
+    start_date_str = request.GET.get('start_date', (timezone.now() - timedelta(days=29)).strftime('%Y-%m-%d'))
+
+    try:
+        end_date = timezone.make_aware(
+            datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59))
+        start_date = timezone.make_aware(datetime.strptime(start_date_str, '%Y-%m-%d'))
+    except (ValueError, TypeError):
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=29)
+
+    events = ProductEvent.objects.filter(
+        product__owner=user,
+        created_at__range=(start_date, end_date)
+    ).select_related('product').order_by('-created_at')
+
+    for event in events:
+        writer.writerow([
+            event.product.name,
+            event.product.category,
+            event.product.price,
+            event.get_event_type_display(),
+            event.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        ])
+
+    return response

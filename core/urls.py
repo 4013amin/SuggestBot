@@ -18,10 +18,27 @@ urlpatterns = [
 
     path('product/<int:pk>/ai-chat/', views.ai_chat_recommendation, name='ai_chat_recommendation'),  # اضافه شده
 
-    
     path('tracking-script.js', views.tracking_script_view, name='tracking_script'),
     path('api/track-event/', views.track_event_view, name='track_event'),
-    
+
     path('product/<int:pk>/report-pdf/', views.product_report_pdf, name='product_report_pdf'),
     path('logout/', views.logout, name='logout'),
+
+    # URL برای داشبورد پیشرفته
+    path('advanced-dashboard/', views.advanced_dashboard_view, name='advanced_dashboard'),
+
+    # URL برای صفحه تحلیل دسته‌بندی‌ها
+    path('analysis/categories/', views.category_analysis_view, name='category_analysis'),
+
+    # URL برای نمایش و مرتب‌سازی لیست محصولات
+    path('products/', views.product_list_sorted_view, name='product_list_sorted'),
+
+    # URL برای مرکز اعلان‌ها
+    path('notifications/', views.notifications_view, name='notifications'),
+
+    # URL برای دانلود گزارش فروش در قالب CSV
+    path('reports/sales/download/csv/', views.download_sales_report_csv, name='download_sales_report_csv'),
+
+    # URL برای API نمودار فروش روزانه (برای استفاده در داشبورد پیشرفته)
+    path('api/charts/daily-sales/', views.daily_sales_chart_api, name='daily_sales_chart_api'),
 ]

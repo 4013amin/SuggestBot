@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+
+{% block title %}داشبورد پیشرفته{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <!-- بخش عنوان و انتخاب بازه زمانی -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">داشبورد پیشرفته</h1>
+        <form method="get" class="form-inline">
+            <label for="start_date" class="ml-2">از تاریخ:</label>
+            <input type="date" id="start_date" name="start_date" value="{{ start_date_str }}" class="form-control form-control-sm ml-1">
+            <label for="end_date" class="ml-2">تا تاریخ:</label>
+            <input type="date" id="end_date" name="end_date" value="{{ end_date_str }}" class="form-control form-control-sm ml-1">
+            <button type="submit" class="btn btn-primary btn-sm">نمایش</button>
+        </form>
+    </div>
+
+    <!-- ردیف کارت‌های اطلاعاتی -->
+    <div class="row">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">مجموع درآمد (تومان)</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_revenue }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">تعداد خرید موفق</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_purchases }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-shopping-bag fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">محصولات با موجودی کم</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ low_stock_products_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-warehouse fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">محصولات تمام شده</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ out_of_stock_products_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-times-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- نمودار تعاملی فروش -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">نمودار فروش روزانه</h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-area">
+                        <canvas id="dailySalesChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- اضافه کردن کتابخانه Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // دریافت داده‌ها از API
+    fetch(`{% url 'core:daily_sales_chart_api' %}?start_date={{ start_date_str }}&end_date={{ end_date_str }}`)
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('dailySalesChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'درآمد روزانه (تومان)',
+                        data: data.revenue_data,
+                        borderColor: 'rgba(78, 115, 223, 1)',
+                        backgroundColor: 'rgba(78, 115, 223, 0.1)',
+                        fill: true,
+                        yAxisID: 'y-revenue',
+                    }, {
+                        label: 'تعداد فروش روزانه',
+                        data: data.count_data,
+                        borderColor: 'rgba(28, 200, 138, 1)',
+                        backgroundColor: 'rgba(28, 200, 138, 0.1)',
+                        fill: true,
+                        yAxisID: 'y-count',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        },
+                        'y-revenue': {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'درآمد (تومان)'
+                            }
+                        },
+                        'y-count': {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: 'تعداد فروش'
+                            },
+                            grid: {
+                                drawOnChartArea: false, // فقط خطوط اصلی محور درآمد نمایش داده شود
+                            }
+                        }
+                    }
+                }
+            });
+        });
+});
+</script>
+{% endblock %}```

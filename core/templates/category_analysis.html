@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+
+{% block title %}تحلیل دسته‌بندی‌ها{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="h3 mb-4 text-gray-800">تحلیل و پیش‌بینی فروش دسته‌بندی‌ها</h1>
+
+    <!-- بخش پیش‌بینی فروش -->
+    {% if forecast_data %}
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">پیش‌بینی فروش برای دسته‌بندی برتر: {{ forecast_data.category_name }}</h6>
+                </div>
+                <div class="card-body">
+                    <p>بر اساس تحلیل داده‌های ۳۰ روز گذشته، پیش‌بینی می‌شود که در ۷ روز آینده حدود <strong>{{ forecast_data.next_7_days_prediction }} عدد</strong> از محصولات این دسته‌بندی به فروش برسد.</p>
+                    <small class="text-muted">این یک پیش‌بینی آماری ساده است و ممکن است تحت تأثیر عوامل مختلف تغییر کند.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- جدول عملکرد دسته‌بندی‌ها -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">عملکرد دسته‌بندی‌ها (۳۰ روز گذشته)</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered text-center" id="dataTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>نام دسته‌بندی</th>
+                            <th>تعداد محصولات</th>
+                            <th>تعداد فروش موفق</th>
+                            <th>درآمد کل (تومان)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for category in category_data %}
+                        <tr>
+                            <td>{{ category.category|default:"بدون دسته‌بندی" }}</td>
+                            <td>{{ category.total_products }}</td>
+                            <td>{{ category.total_purchases }}</td>
+                            <td>{{ category.total_revenue|floatformat:2|default:"0" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4">هیچ داده‌ای برای نمایش یافت نشد.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

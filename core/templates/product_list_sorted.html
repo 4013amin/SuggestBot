@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+
+{% block title %}لیست محصولات{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="h3 mb-2 text-gray-800">لیست محصولات</h1>
+    <p class="mb-4">محصولات خود را بر اساس معیارهای مختلف مشاهده و مرتب کنید.</p>
+
+    <!-- فرم مرتب‌سازی -->
+    <div class="mb-3">
+        <form method="get" id="sortForm">
+            <div class="form-row align-items-center">
+                <div class="col-auto">
+                    <label for="sort_by">مرتب‌سازی بر اساس:</label>
+                </div>
+                <div class="col-auto">
+                    <select name="sort_by" id="sort_by" class="form-control" onchange="document.getElementById('sortForm').submit();">
+                        <option value="-created_at" {% if current_sort == '-created_at' %}selected{% endif %}>جدیدترین</option>
+                        <option value="most_purchased" {% if current_sort == 'most_purchased' %}selected{% endif %}>پرفروش‌ترین</option>
+                        <option value="highest_discount" {% if current_sort == 'highest_discount' %}selected{% endif %}>بیشترین تخفیف</option>
+                        <option value="lowest_stock" {% if current_sort == 'lowest_stock' %}selected{% endif %}>کمترین موجودی</option>
+                        <option value="highest_price" {% if current_sort == 'highest_price' %}selected{% endif %}>گران‌ترین</option>
+                        <option value="lowest_price" {% if current_sort == 'lowest_price' %}selected{% endif %}>ارزان‌ترین</option>
+                    </select>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- جدول محصولات -->
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>نام محصول</th>
+                            <th>دسته بندی</th>
+                            <th>قیمت (تومان)</th>
+                            <th>تخفیف (%)</th>
+                            <th>موجودی</th>
+                            <th>مشاهده جزئیات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for product in products %}
+                        <tr>
+                            <td>{{ product.name }}</td>
+                            <td>{{ product.category|default:"--" }}</td>
+                            <td>{{ product.price|floatformat:2 }}</td>
+                            <td>{{ product.discount }}</td>
+                            <td>{{ product.stock }}</td>
+                            <td>
+                                <a href="{% url 'core:product_detail' product.pk %}" class="btn btn-info btn-sm">جزئیات</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center">هیچ محصولی یافت نشد.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
