@@ -9,6 +9,19 @@ import string
 
 
 # Create your models here.
+class Category(models.Model):
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='categories')
+    name = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'دسته‌بندی'
+        verbose_name_plural = 'دسته بندی ها '
+
+    def __str__(self):
+        return self.name
+
+
 class Product(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='products')
     name = models.CharField(max_length=255)
@@ -17,7 +30,7 @@ class Product(models.Model):
     image_url = models.URLField(max_length=1024, null=True, blank=True)
     page_url = models.URLField(max_length=1024, unique=True)  # URL به عنوان شناسه اصلی
     stock = models.IntegerField(default=0)
-    category = models.CharField(max_length=100, null=True, blank=True)
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True, related_name='products')
     discount = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -104,3 +117,20 @@ class UserSite(models.Model):
     class Meta:
         verbose_name = 'سایت کاربر'
         verbose_name_plural = 'سایت‌های کاربران'
+
+
+class Notifications(models.Model):
+    class NotificationType(models.TextChoices):
+        LOW_STOCK = 'LOW_STOCK', 'موجودی کم'
+        NEW_RECOMMENDATION = 'NEW_RECOMMENDATION', 'پیشنهاد جدید'
+        SYSTEM_ALERT = 'SYSTEM_ALERT', 'هشدار سیستمی'
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    notification_type = models.CharField(max_length=20, choices=NotificationType.choices)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"اعلان برای {self.user.username}: {self.title}"

@@ -1,9 +1,13 @@
+from statistics import LinearRegression
+from turtle import pd
+
+import numpy as np
 import requests
 import logging
 from django.utils import timezone
 from datetime import timedelta
 from django.db.models import Count, Q
-from .models import Product, ProductEvent, Recommendation
+from .models import Product, ProductEvent, Recommendation, Notifications
 
 logger = logging.getLogger(__name__)
 
@@ -199,12 +203,14 @@ def update_recommendations(user, start_date, end_date, product=None):
                 reason=general_reason,
                 defaults={'text': general_text, 'is_active': True}
             )
-            Recommendation.objects.filter(owner=user, product__isnull=True).exclude(pk=rec_obj.pk).update(is_active=False)
+            Recommendation.objects.filter(owner=user, product__isnull=True).exclude(pk=rec_obj.pk).update(
+                is_active=False)
         else:
             Recommendation.objects.filter(owner=user, product__isnull=True).update(is_active=False)
 
         # پیشنهادات هوش مصنوعی برای کل سایت
         generate_ai_recommendations(user, data)
+
 
 def fetch_product_data(product, start_date, end_date):
     """جمع‌آوری داده‌های خاص یک محصول برای تحلیل"""
@@ -253,3 +259,72 @@ def predict_cart_abandonment(user, product, start_date, end_date):
     except requests.RequestException as e:
         logger.error(f"Error predicting cart abandonment: {str(e)}")
         return 0.0, "خطا در دریافت پیش‌بینی"
+
+
+# تابع برای پیش‌بینی فروش در روزهای آینده
+def predict_future_sales(product_id, days_to_predict=30):
+    """
+    پیش‌بینی فروش یک محصول برای N روز آینده با استفاده از رگرسیون خطی ساده.
+    """
+    end_date = timezone.now()
+    start_date = end_date - timedelta(days=90)  # استفاده از داده‌های ۹۰ روز گذشته
+
+    # دریافت رویدادهای خرید
+    purchases = ProductEvent.objects.filter(
+        product_id=product_id,
+        event_type='PURCHASE',
+        created_at__range=(start_date, end_date)
+    ).values('created_at__date').annotate(daily_sales=Count('id')).order_by('created_at__date')
+
+    if not purchases or len(purchases) < 5:  # نیاز به حداقل داده برای پیش‌بینی
+        return None, "داده‌های کافی برای پیش‌بینی وجود ندارد."
+
+    # آماده‌سازی داده‌ها برای مدل
+    df = pd.DataFrame(list(purchases))
+    df['created_at__date'] = pd.to_datetime(df['created_at__date'])
+    df['day_number'] = (df['created_at__date'] - df['created_at__date'].min()).dt.days
+
+    X = df[['day_number']]
+    y = df['daily_sales']
+
+    # آموزش مدل
+    model = LinearRegression()
+    model.fit(X, y)
+
+    # پیش‌بینی برای روزهای آینده
+    last_day_number = df['day_number'].max()
+    future_days = np.arange(last_day_number + 1, last_day_number + 1 + days_to_predict).reshape(-1, 1)
+    predicted_sales = model.predict(future_days)
+    predicted_sales = np.maximum(0, predicted_sales)  # فروش نمی‌تواند منفی باشد
+
+    # ساخت دیکشنری از تاریخ و فروش پیش‌بینی شده
+    future_dates = pd.to_datetime(df['created_at__date'].min()) + pd.to_timedelta(future_days.flatten(), unit='d')
+    predictions = {date.strftime('%Y-%m-%d'): round(sale) for date, sale in zip(future_dates, predicted_sales)}
+
+    return predictions, "پیش‌بینی با موفقیت انجام شد."
+
+
+# تابع برای بررسی و ایجاد اعلان اتمام موجودی
+def check_low_stock_products(low_stock_threshold=10):
+    """
+    محصولاتی که موجودی آن‌ها کم است را بررسی و برای صاحبان آن‌ها اعلان ایجاد می‌کند.
+    این تابع باید به صورت دوره‌ای (مثلاً روزی یکبار) اجرا شود.
+    """
+    products_low_stock = Product.objects.filter(stock__gt=0, stock__lte=low_stock_threshold)
+    for product in products_low_stock:
+        # تنها در صورتی اعلان ایجاد کن که قبلاً برای این محصول اعلان خوانده‌نشده وجود نداشته باشد
+        existing_notification = Notifications.objects.filter(
+            user=product.owner,
+            notification_type='LOW_STOCK',
+            is_read=False,
+            message__contains=f"محصول «{product.name}»"
+        ).exists()
+
+        if not existing_notification:
+            Notifications.objects.create(
+                user=product.owner,
+                title=f"هشدار اتمام موجودی: {product.name}",
+                message=f"موجودی محصول «{product.name}» به {product.stock} عدد رسیده است. لطفاً موجودی را بررسی کنید.",
+                notification_type='LOW_STOCK'
+            )
+            logger.info(f"Low stock notification created for product {product.id} for user {product.owner.username}")
