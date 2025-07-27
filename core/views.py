@@ -176,7 +176,7 @@ def verify_otp_view(request):
 def connect_site_view(request):
     api_key_obj, created = ApiKey.objects.get_or_create(user=request.user)
     context = {'api_key': api_key_obj.key}
-    return render(request, 'connect_site.html', context)
+    return render(request, 'connect_site.html', context) 
 
 
 @login_required
