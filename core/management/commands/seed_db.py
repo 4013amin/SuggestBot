@@ -1,172 +1,132 @@
-import random
+# core/management/commands/populate_db.py
 
-import self
+import random
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from faker import Faker
 from decimal import Decimal
 from django.utils import timezone
 from datetime import timedelta
-from core.models import Product, ProductEvent, Recommendation
+from core.models import Product, ProductEvent, Recommendation, Category
 
 
 class Command(BaseCommand):
-    help = 'پایگاه داده را با داده‌های فیک برای تست تحلیلگر پر می‌کند.'
+    help = 'پایگاه داده را با داده‌های فیک و سناریوهای واقعی برای تست داشبورد پر می‌کند.'
 
     def handle(self, *args, **kwargs):
-
         self.stdout.write(self.style.SUCCESS('شروع فرآیند ساخت داده‌های تستی...'))
 
-    # یک کاربر تستی برای مالکیت داده‌ها
-    user, _ = User.objects.get_or_create(username='09120000000', defaults={'email': 'test@example.com'})
+        faker = Faker('fa_IR')
 
-    # پاک کردن داده‌های قدیمی این کاربر
-    Product.objects.filter(owner=user).delete()
-    Recommendation.objects.filter(owner=user).delete()
+        # 1. --- ایجاد کاربر و پاک کردن داده‌های قدیمی ---
+        user, _ = User.objects.get_or_create(username='09120000000', defaults={'email': 'testuser@example.com'})
+        self.stdout.write(self.style.WARNING(f'داده‌ها برای کاربر "{user.username}" ایجاد خواهند شد.'))
 
-    faker = Faker('fa_IR')
+        self.stdout.write(self.style.WARNING('در حال پاک کردن داده‌های قدیمی...'))
+        ProductEvent.objects.filter(product__owner=user).delete()
+        Recommendation.objects.filter(owner=user).delete()
+        Product.objects.filter(owner=user).delete()
+        Category.objects.filter(owner=user).delete()
 
-    # تعریف محصولات با ویژگی‌های متنوع
-    products_to_create = [
-        {'name': 'گوشی هوشمند پرچمدار X20', 'base_views': 500, 'stock': 50, 'discount': 10},
-        {'name': 'لپتاپ گیمینگ سری Alpha', 'base_views': 350, 'stock': 20, 'discount': 5},
-        {'name': 'ساعت هوشمند FitLife 5', 'base_views': 800, 'stock': 10, 'discount': 15},
-        {'name': 'هدفون بی‌سیم نویز کنسلینگ', 'base_views': 120, 'stock': 100, 'discount': 0},
-        # بازدید بالا، سبد خرید کم
-        {'name': 'قهوه‌ساز اتوماتیک باریستا', 'base_views': 20, 'stock': 5, 'discount': 30},  # بازدید و موجودی کم
-        {'name': 'کنسول بازی نسل جدید Z-Box', 'base_views': 950, 'stock': 30, 'discount': 20},  # محصول محبوب
-    ]
+        # 2. --- ایجاد دسته‌بندی‌ها ---
+        categories = []
+        category_names = ['کالای دیجیتال', 'لوازم خانگی', 'مد و پوشاک', 'ورزش و سفر', 'کتاب و لوازم تحریر']
+        for name in category_names:
+            category = Category.objects.create(owner=user, name=name)
+            categories.append(category)
+        self.stdout.write(self.style.SUCCESS(f'{len(categories)} دسته‌بندی ایجاد شد.'))
 
-    products = []
-    for i, p_data in enumerate(products_to_create):
-        product = Product.objects.create(
-            owner=user,
-            name=p_data['name'],
-            price=Decimal(random.randint(5, 500)) * 100000,
-            stock=p_data['stock'],
-            discount=p_data['discount'],
-            page_url=f'https://test-shop.com/product/{i + 1}',
-            category=faker.word(),
-            image_url=f'https://test-shop.com/images/product_{i + 1}.jpg'
-        )
-    products.append((product, p_data['base_views']))
-    self.stdout.write(
-        self.style.SUCCESS(f'محصول "{product.name}" با موجودی {product.stock} و تخفیف {product.discount}% ایجاد شد.'))
+        # 3. --- تعریف سناریوهای محصولات ---
+        # این سناریوها برای تست بخش‌های مختلف داشبورد طراحی شده‌اند
+        product_scenarios = [
+            {'name': 'گوشی هوشمند پرچمدار P50 Pro', 'base_views': 950, 'conversion_rate': 0.15, 'purchase_rate': 0.7,
+             'stock': 50, 'category': 'کالای دیجیتال'},
+            {'name': 'لپتاپ گیمینگ Legion X', 'base_views': 700, 'conversion_rate': 0.12, 'purchase_rate': 0.6,
+             'stock': 20, 'category': 'کالای دیجیتال'},
+            {'name': 'کفش ورزشی نایکی ایرمکس', 'base_views': 1200, 'conversion_rate': 0.02, 'purchase_rate': 0.5,
+             'stock': 100, 'category': 'مد و پوشاک'},  # بازدید بالا، تبدیل کم
+            {'name': 'ساعت هوشمند گلکسی واچ ۶', 'base_views': 800, 'conversion_rate': 0.18, 'purchase_rate': 0.8,
+             'stock': 8, 'category': 'کالای دیجیتال'},  # موجودی کم
+            {'name': 'قهوه‌ساز اتوماتیک دلونگی', 'base_views': 250, 'conversion_rate': 0.08, 'purchase_rate': 0.4,
+             'stock': 30, 'category': 'لوازم خانگی'},
+            {'name': 'کتاب فلسفه هنر', 'base_views': 80, 'conversion_rate': 0.05, 'purchase_rate': 0.9, 'stock': 50,
+             'category': 'کتاب و لوازم تحریر'},  # بازدید کم
+        ]
 
-    self.stdout.write(self.style.SUCCESS(f'{len(products)} محصول فیک ایجاد شد.'))
+        created_products = []
+        for i, p_data in enumerate(product_scenarios):
+            category_obj = Category.objects.get(name=p_data['category'])
+            product = Product.objects.create(
+                owner=user,
+                name=p_data['name'],
+                price=Decimal(random.randint(1, 25)) * 1000000,
+                stock=p_data['stock'],
+                page_url=f'https://test-shop.com/product/{faker.slug()}-{i}',
+                category=category_obj,
+                image_url=f'https://picsum.photos/seed/{i}/400/300'
+            )
+            created_products.append({'product': product, 'scenario': p_data})
 
-    # --- ایجاد رویدادهای فیک (بازدید، افزودن به سبد، خرید) ---
-    for product, base_views in products:
-        for _ in range(random.randint(base_views - 50, base_views + 50)):
-            ProductEvent.objects.create(
-                product=product,
-                event_type=ProductEvent.EventType.VIEW,
-                created_at=faker.date_time_between(start_date='-30d', end_date='now',
-                                                   tzinfo=timezone.get_current_timezone())
+        self.stdout.write(self.style.SUCCESS(f'{len(created_products)} محصول با سناریوهای مشخص ایجاد شد.'))
+
+        # 4. --- ایجاد رویدادهای فیک بر اساس سناریوها ---
+        self.stdout.write('در حال ایجاد رویدادهای بازدید، سبد خرید و خرید...')
+        for item in created_products:
+            product = item['product']
+            scenario = item['scenario']
+
+            # ایجاد بازدیدها
+            view_count = random.randint(scenario['base_views'] - 50, scenario['base_views'] + 50)
+            for _ in range(view_count):
+                ProductEvent.objects.create(
+                    product=product,
+                    event_type=ProductEvent.EventType.VIEW,
+                    created_at=faker.date_time_between(start_date='-60d', end_date='now',
+                                                       tzinfo=timezone.get_current_timezone()),
+                    user_ip=faker.ipv4()
+                )
+
+            # ایجاد افزودن به سبد
+            add_to_cart_count = int(view_count * scenario['conversion_rate'])
+            for _ in range(add_to_cart_count):
+                ProductEvent.objects.create(
+                    product=product,
+                    event_type=ProductEvent.EventType.ADD_TO_CART,
+                    created_at=faker.date_time_between(start_date='-60d', end_date='now',
+                                                       tzinfo=timezone.get_current_timezone()),
+                    user_ip=faker.ipv4()
+                )
+
+            # ایجاد خریدها
+            purchase_count = int(add_to_cart_count * scenario['purchase_rate'])
+            for _ in range(purchase_count):
+                ProductEvent.objects.create(
+                    product=product,
+                    event_type=ProductEvent.EventType.PURCHASE,
+                    created_at=faker.date_time_between(start_date='-60d', end_date='now',
+                                                       tzinfo=timezone.get_current_timezone()),
+                    user_ip=faker.ipv4()
+                )
+
+        self.stdout.write(self.style.SUCCESS('رویدادها با موفقیت ایجاد شدند.'))
+
+        # 5. --- ایجاد چند پیشنهاد هوشمند فیک برای تست ---
+        try:
+            attention_product = Product.objects.get(name__contains='کفش ورزشی')
+            Recommendation.objects.create(
+                owner=user, product=attention_product, reason='HIGH_VIEW_LOW_ADD',
+                text='بازدیدکنندگان زیادی به این کفش علاقه‌مندند اما آن را نمی‌خرند. شاید قیمت بالا یا نبود سایز مناسب دلیل آن باشد.',
+                confidence_score=0.85, is_active=True
             )
 
-    # افزودن به سبد خرید
-    if 'هدفون' in product.name:
-        conversion_rate = 0.01  # نرخ تبدیل پایین
-    else:
-        conversion_rate = random.uniform(0.05, 0.20)
+            low_stock_product = Product.objects.get(name__contains='ساعت هوشمند')
+            Recommendation.objects.create(
+                owner=user, product=low_stock_product, reason='LOW_STOCK',
+                text=f'موجودی ساعت هوشمند به کمتر از ۱۰ عدد رسیده است. سریعا آن را شارژ کنید تا فروش را از دست ندهید.',
+                confidence_score=0.98, is_active=True
+            )
+            self.stdout.write(self.style.SUCCESS('پیشنهادهای هوشمند فیک ایجاد شدند.'))
+        except Product.DoesNotExist:
+            self.stdout.write(self.style.WARNING('محصولات مورد نیاز برای ساخت پیشنهاد فیک یافت نشدند.'))
 
-    view_count = ProductEvent.objects.filter(product=product, event_type=ProductEvent.EventType.VIEW).count()
-    add_to_cart_count = int(view_count * conversion_rate)
-
-    for _ in range(add_to_cart_count):
-        ProductEvent.objects.create(
-            product=product,
-            event_type=ProductEvent.EventType.ADD_TO_CART,
-            created_at=faker.date_time_between(start_date='-30d', end_date='now',
-                                               tzinfo=timezone.get_current_timezone())
-        )
-
-    # خریدها (نرخ خرید بین 20% تا 80% از افزودن به سبد)
-    purchase_rate = random.uniform(0.2, 0.8)
-    purchase_count = int(add_to_cart_count * purchase_rate)
-    for _ in range(purchase_count):
-        ProductEvent.objects.create(
-            product=product,
-            event_type=ProductEvent.EventType.PURCHASE,
-            created_at=faker.date_time_between(start_date='-30d', end_date='now',
-                                               tzinfo=timezone.get_current_timezone())
-        )
-
-    self.stdout.write(self.style.SUCCESS('رویدادهای بازدید، سبد خرید و خرید ایجاد شدند.'))
-
-    # --- ایجاد پیشنهادهای هوشمند فیک ---
-    # ۱. پیشنهاد برای محصول با بازدید کم
-    low_view_product = Product.objects.get(name__contains='قهوه‌ساز')
-    Recommendation.objects.create(
-        owner=user,
-        product=low_view_product,
-        reason='LOW_VIEW',
-        text='این محصول بازدید بسیار کمی دارد. آن را در صفحه اصلی یا در کمپین‌های تبلیغاتی خود معرفی کنید.',
-        confidence_score=0.7,
-        is_active=True
-    )
-
-    # ۲. پیشنهاد برای محصول با بازدید بالا و سبد خرید کم
-    attention_product = Product.objects.get(name__contains='هدفون')
-    Recommendation.objects.create(
-        owner=user,
-        product=attention_product,
-        reason='HIGH_VIEW_LOW_ADD',
-        text='کاربران زیادی از این محصول بازدید می‌کنند اما آن را به سبد خرید اضافه نمی‌کنند. قیمت، توضیحات و تصاویر محصول را بازبینی کنید.',
-        confidence_score=0.8,
-        is_active=True
-    )
-
-    # ۳. پیشنهاد برای محصول محبوب
-    popular_product = Product.objects.get(name__contains='کنسول بازی')
-    Recommendation.objects.create(
-        owner=user,
-        product=popular_product,
-        reason='POPULAR_ITEM',
-        text='این محصول ستاره فروشگاه شماست! موجودی انبار آن را همیشه چک کنید و در کنار آن محصولات مکمل مانند بازی یا دسته اضافه پیشنهاد دهید.',
-        confidence_score=0.9,
-        is_active=True
-    )
-
-    # ۴. پیشنهاد قیمت‌گذاری پویا
-    for product in Product.objects.filter(owner=user):
-        view_count = product.events.filter(event_type='VIEW').count()
-    cart_count = product.events.filter(event_type='ADD_TO_CART').count()
-    conversion_rate = (cart_count / view_count * 100) if view_count > 0 else 0
-    if view_count > 50 and conversion_rate < 2:
-        suggestion = f"برای '{product.name}'، قیمت را به {float(product.price) * 0.9:.2f} کاهش دهید تا فروش افزایش یابد."
-    Recommendation.objects.create(
-        owner=user,
-        product=product,
-        reason='DYNAMIC_PRICING',
-        text=suggestion,
-        confidence_score=0.85,
-        is_active=True
-    )
-    suggestion = f"تقاضا برای '{product.name}' بالاست. می‌توانید قیمت را به {float(product.price) * 1.1:.2f} افزایش دهید."
-    Recommendation.objects.create(
-        owner=user,
-        product=product,
-        reason='DYNAMIC_PRICING',
-        text=suggestion,
-        confidence_score=0.9,
-        is_active=True
-    )
-
-    # ۵. پیشنهاد کلی سایت
-    total_views = ProductEvent.objects.filter(product__owner=user, event_type='VIEW').count()
-    total_carts = ProductEvent.objects.filter(product__owner=user, event_type='ADD_TO_CART').count()
-    overall_conversion = (total_carts / total_views * 100) if total_views > 0 else 0
-    if total_views > 100 and overall_conversion < 1:
-        Recommendation.objects.create(
-            owner=user,
-            product=None,
-            reason='HIGH_VIEW_LOW_ADD',
-            text='بازدید کلی سایت بالا اما نرخ تبدیل پایین است. فرایند پرداخت یا هزینه‌های ارسال را بررسی کنید.',
-            confidence_score=0.8,
-            is_active=True
-        )
-
-    self.stdout.write(self.style.SUCCESS('پیشنهادهای هوشمند فیک و قیمت‌گذاری پویا ایجاد شدند.'))
-    self.stdout.write(self.style.SUCCESS('عملیات با موفقیت به پایان رسید!'))
+        self.stdout.write(self.style.SUCCESS('عملیات با موفقیت به پایان رسید! حالا می‌توانید داشبورد را بررسی کنید.'))

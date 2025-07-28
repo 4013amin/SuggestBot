@@ -1,12 +1,14 @@
 from statistics import LinearRegression
-from turtle import pd
 
+import pandas as pd
+from mlxtend.frequent_patterns import apriori, association_rules
+from sklearn.linear_model import LinearRegression
 import numpy as np
 import requests
 import logging
 from django.utils import timezone
 from datetime import timedelta
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from .models import Product, ProductEvent, Recommendation, Notifications
 
 logger = logging.getLogger(__name__)
@@ -328,3 +330,120 @@ def check_low_stock_products(low_stock_threshold=10):
                 notification_type='LOW_STOCK'
             )
             logger.info(f"Low stock notification created for product {product.id} for user {product.owner.username}")
+
+
+def calculate_funnel_analysis(user, start_date, end_date):
+    """تحلیل قیف فروش بر اساس کاربران یکتا (IP)."""
+    events = ProductEvent.objects.filter(
+        product__owner=user, created_at__range=(start_date, end_date)
+    )
+
+    # شمارش کاربران یکتا در هر مرحله
+    total_views = events.filter(event_type='VIEW').values('user_ip').distinct().count()
+    total_carts = events.filter(event_type='ADD_TO_CART').values('user_ip').distinct().count()
+    total_purchases = events.filter(event_type='PURCHASE').values('user_ip').distinct().count()
+
+    return {
+        'views': total_views,
+        'carts': total_carts,
+        'purchases': total_purchases,
+        'view_to_cart_rate': (total_carts / total_views * 100) if total_views > 0 else 0,
+        'cart_to_purchase_rate': (total_purchases / total_carts * 100) if total_carts > 0 else 0,
+        'overall_conversion_rate': (total_purchases / total_views * 100) if total_views > 0 else 0,
+    }
+
+
+def get_customer_segments(owner_user, start_date, end_date):
+    """بخش‌بندی کاربران بر اساس رفتارشان در بازه زمانی مشخص."""
+    events = ProductEvent.objects.filter(product__owner=owner_user, created_at__range=(start_date, end_date),
+                                         user_ip__isnull=False)
+
+    high_value_users = events.filter(event_type='PURCHASE').values('user_ip').annotate(
+        total_spent=Sum('product__price')
+    ).order_by('-total_spent')[:5]
+
+    loyal_users = events.filter(event_type='PURCHASE').values('user_ip').annotate(
+        purchase_count=Count('id')
+    ).order_by('-purchase_count')[:5]
+
+    window_shoppers = events.values('user_ip').annotate(
+        view_count=Count('id', filter=Q(event_type='VIEW')),
+        purchase_count=Count('id', filter=Q(event_type='PURCHASE'))
+    ).filter(view_count__gt=20, purchase_count=0).order_by('-view_count')[:5]
+
+    return {
+        'high_value': [item['user_ip'] for item in high_value_users],
+        'loyal': [item['user_ip'] for item in loyal_users],
+        'window_shoppers': [item['user_ip'] for item in window_shoppers]
+    }
+
+
+def get_market_basket_analysis(user):
+    """
+    تحلیل سبد خرید. این تابع برای جلوگیری از کندی باید در پس‌زمینه اجرا شود.
+    """
+    all_purchases = list(ProductEvent.objects.filter(
+        product__owner=user, event_type='PURCHASE'
+    ).values('user_ip', 'created_at__date', 'product__name'))
+
+    if len(all_purchases) < 20:  # نیاز به حداقل داده برای تحلیل معنادار
+        return None, "داده کافی برای تحلیل سبد خرید وجود ندارد."
+
+    df = pd.DataFrame(all_purchases)
+
+    try:
+        basket = df.groupby(['user_ip', 'created_at__date', 'product__name'])[
+            'product__name'].count().unstack().reset_index().fillna(0).set_index(['user_ip', 'created_at__date'])
+        basket_sets = basket.applymap(lambda x: x > 0)
+
+        frequent_itemsets = apriori(basket_sets, min_support=0.01, use_colnames=True)
+        if frequent_itemsets.empty:
+            return None, "هیچ الگوی پرتکراری در خریدها یافت نشد."
+
+        rules = association_rules(frequent_itemsets, metric="lift", min_threshold=1)
+        if rules.empty:
+            return None, "هیچ قانون وابستگی معناداری یافت نشد."
+
+        rules["antecedents"] = rules["antecedents"].apply(lambda x: ', '.join(list(x)))
+        rules["consequents"] = rules["consequents"].apply(lambda x: ', '.join(list(x)))
+        return rules.sort_values('confidence', ascending=False).head(5), "تحلیل با موفقیت انجام شد."
+    except Exception as e:
+        logger.error(f"Market Basket Analysis failed: {e}")
+        return None, "خطا در پردازش تحلیل سبد خرید."
+
+
+def predict_future_sales(product_id, days_to_predict=30):
+    """
+    پیش‌بینی فروش با رگرسیون خطی.
+    """
+    end_date = timezone.now()
+    start_date = end_date - timedelta(days=90)
+
+    purchases = list(ProductEvent.objects.filter(
+        product_id=product_id,
+        event_type='PURCHASE',
+        created_at__range=(start_date, end_date)
+    ).values('created_at__date').annotate(daily_sales=Count('id')).order_by('created_at__date'))
+
+    if len(purchases) < 10:  # نیاز به حداقل ۱۰ نقطه داده
+        return None, "داده‌های کافی برای پیش‌بینی فروش این محصول وجود ندارد."
+
+    df = pd.DataFrame(purchases)
+    df['created_at__date'] = pd.to_datetime(df['created_at__date'])
+    df['day_number'] = (df['created_at__date'] - df['created_at__date'].min()).dt.days
+
+    X = df[['day_number']]
+    y = df['daily_sales']
+
+    model = LinearRegression()
+    model.fit(X, y)
+
+    last_day_number = df['day_number'].max()
+    future_days = np.arange(last_day_number + 1, last_day_number + 1 + days_to_predict).reshape(-1, 1)
+    predicted_sales = model.predict(future_days)
+    predicted_sales = np.maximum(0, predicted_sales)  # فروش نمی‌تواند منفی باشد
+
+    future_dates = pd.to_datetime(df['created_at__date'].min()) + pd.to_timedelta(future_days.flatten(), unit='d')
+    predictions = {date.strftime('%Y-%m-%d'): round(sale) for date, sale in zip(future_dates, predicted_sales)}
+
+    return predictions, "پیش‌بینی با موفقیت انجام شد."

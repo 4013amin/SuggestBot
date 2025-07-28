@@ -40,10 +40,16 @@ from .utils import update_recommendations, fetch_product_data, predict_cart_aban
 import logging
 import random
 from django.http import JsonResponse, HttpResponse
-from .utils import fetch_data_for_analysis, generate_ai_recommendations
 from django.views.decorators.cache import cache_control
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+
+from .utils import (
+    calculate_funnel_analysis,
+    get_customer_segments,
+    get_market_basket_analysis,
+    predict_future_sales
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,63 +60,111 @@ AI_API_KEY = "your-ai-api-key"
 @login_required
 def dashboard_overview_view(request):
     user = request.user
-    end_date_str = request.GET.get('end_date', timezone.now().strftime('%Y-%m-%d'))
-    start_date_str = request.GET.get('start_date', (timezone.now() - timedelta(days=29)).strftime('%Y-%m-%d'))
 
+    # مدیریت دقیق و پایدار تاریخ‌ها
     try:
-        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+        end_date_str = request.GET.get('end_date', timezone.now().strftime('%Y-%m-%d'))
+        start_date_str = request.GET.get('start_date', (timezone.now() - timedelta(days=6)).strftime('%Y-%m-%d'))
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-        end_date = timezone.make_aware(end_date)
-        start_date = timezone.make_aware(start_date)
     except (ValueError, TypeError):
         end_date = timezone.now()
-        start_date = end_date - timedelta(days=29)
+        start_date = end_date - timedelta(days=6)
 
-    update_recommendations(user, start_date, end_date)
+    # تبدیل به تاریخ‌های آگاه از منطقه زمانی برای کوئری‌های دقیق
+    aware_start_date = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+    aware_end_date = timezone.make_aware(datetime.combine(end_date, datetime.max.time()))
+    date_range = (aware_start_date, aware_end_date)
 
+    # 1. آمار کلی
     products = Product.objects.filter(owner=user)
-    all_events = ProductEvent.objects.filter(product__in=products, created_at__range=(start_date, end_date))
+    all_events = ProductEvent.objects.filter(product__in=products, created_at__range=date_range)
     total_views = all_events.filter(event_type='VIEW').count()
     total_carts = all_events.filter(event_type='ADD_TO_CART').count()
     total_purchases = all_events.filter(event_type='PURCHASE').count()
-    overall_conversion = (total_carts / total_views * 100) if total_views > 0 else 0
-    overall_purchase_rate = (total_purchases / total_views * 100) if total_views > 0 else 0
+    overall_conversion = (total_purchases / total_views * 100) if total_views > 0 else 0
 
-    date_filter = Q(events__created_at__range=(start_date, end_date))
-    views_in_range = Count('events', filter=Q(events__event_type='VIEW') & date_filter)
-    carts_in_range = Count('events', filter=Q(events__event_type='ADD_TO_CART') & date_filter)
-    purchases_in_range = Count('events', filter=Q(events__event_type='PURCHASE') & date_filter)
-
+    # 2. محصولات محبوب و نیازمند توجه
+    date_filter = Q(events__created_at__range=date_range)
     popular_products = products.annotate(
-        views_count=views_in_range,
-        carts_count=carts_in_range,
-        purchases_count=purchases_in_range
-    ).order_by('-purchases_count', '-carts_count', '-views_count')[:5]
+        purchases_count=Count('events', filter=Q(events__event_type='PURCHASE') & date_filter)
+    ).filter(purchases_count__gt=0).order_by('-purchases_count')[:5]
 
     attention_products = products.annotate(
-        views_count=views_in_range,
-        carts_count=carts_in_range
+        views_count=Count('events', filter=Q(events__event_type='VIEW') & date_filter),
+        carts_count=Count('events', filter=Q(events__event_type='ADD_TO_CART') & date_filter)
     ).filter(views_count__gt=20, carts_count=0).order_by('-views_count')[:5]
 
-    latest_recommendations = Recommendation.objects.filter(
-        owner=user, is_active=True
-    ).order_by('-created_at', '-confidence_score')[:10]
+    # 3. پیشنهادات
+    recommendations = Recommendation.objects.filter(owner=user, is_active=True).order_by('-confidence_score',
+                                                                                         '-created_at')[:5]
+
+    # 4. تحلیل‌های پیشرفته از utils.py
+    funnel_data = calculate_funnel_analysis(user, aware_start_date, aware_end_date)
+    customer_segments = get_customer_segments(user, aware_start_date, aware_end_date)
+    market_basket_rules, market_basket_message = get_market_basket_analysis(user)
+
+    # 5. پیش‌بینی فروش
+    sales_forecast, forecast_message, forecast_product_name = None, "محصول پرفروشی برای پیش‌بینی یافت نشد.", ""
+    top_product = ProductEvent.objects.filter(product__owner=user, event_type='PURCHASE'
+                                              ).values('product__id', 'product__name').annotate(c=Count('id')).order_by(
+        '-c').first()
+
+    if top_product:
+        forecast_product_name = top_product['product__name']
+        sales_forecast, forecast_message = predict_future_sales(top_product['product__id'])
 
     context = {
         'total_views': total_views,
         'total_carts': total_carts,
         'total_purchases': total_purchases,
         'overall_conversion': f"{overall_conversion:.2f}",
-        'overall_purchase_rate': f"{overall_purchase_rate:.2f}",
-        'product_count': products.count(),
         'popular_products': popular_products,
         'attention_products': attention_products,
-        'recommendations': latest_recommendations,
+        'recommendations': recommendations,
         'start_date_str': start_date.strftime('%Y-%m-%d'),
         'end_date_str': end_date.strftime('%Y-%m-%d'),
-        'is_custom_date_range': 'start_date' in request.GET,
+        'funnel_data': funnel_data,
+        'customer_segments': customer_segments,
+        'market_basket_rules': market_basket_rules,
+        'market_basket_message': market_basket_message,
+        'sales_forecast': sales_forecast,
+        'forecast_message': forecast_message,
+        'forecast_product_name': forecast_product_name,
     }
     return render(request, 'dashboard_overview.html', context)
+
+
+@login_required
+def daily_events_chart_api(request):
+    """API پایدار برای تامین داده‌های نمودار داینامیک."""
+    user = request.user
+    try:
+        end_date = datetime.strptime(request.GET.get('end_date'), '%Y-%m-%d').date()
+        start_date = datetime.strptime(request.GET.get('start_date'), '%Y-%m-%d').date()
+    except (ValueError, TypeError, AttributeError):
+        end_date = timezone.now().date()
+        start_date = end_date - timedelta(days=6)
+
+    date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
+    chart_data = {d.strftime('%Y-%m-%d'): {'views': 0, 'carts': 0, 'purchases': 0} for d in date_range}
+
+    events_by_day = ProductEvent.objects.filter(
+        product__owner=user, created_at__date__range=(start_date, end_date)
+    ).annotate(day=TruncDate('created_at')).values('day', 'event_type').annotate(count=Count('id'))
+
+    for event in events_by_day:
+        day_str = event['day'].strftime('%Y-%m-%d')
+        event_key = f"{event['event_type'].lower()}s"  # 'VIEW' -> 'views'
+        if day_str in chart_data and event_key in chart_data[day_str]:
+            chart_data[day_str][event_key] = event['count']
+
+    return JsonResponse({
+        'labels': list(chart_data.keys()),
+        'views': [d['views'] for d in chart_data.values()],
+        'carts': [d['carts'] for d in chart_data.values()],
+        'purchases': [d['purchases'] for d in chart_data.values()],
+    })
 
 
 def request_otp_view(request):
@@ -176,7 +230,7 @@ def verify_otp_view(request):
 def connect_site_view(request):
     api_key_obj, created = ApiKey.objects.get_or_create(user=request.user)
     context = {'api_key': api_key_obj.key}
-    return render(request, 'connect_site.html', context) 
+    return render(request, 'connect_site.html', context)
 
 
 @login_required
@@ -563,53 +617,6 @@ def send_dashboard_link_view(request):
 def logout(request):
     auth_logout(request)
     return redirect('core:request_otp')
-
-
-# ===================================================================
-# ===== بخش جدید: ویژگی‌های اضافه شده بر اساس درخواست شما =====
-# ===================================================================
-
-# بخش جدید: داشبورد پیشرفته با قابلیت‌های بیشتر
-@login_required
-def advanced_dashboard_view(request):
-    """
-    این ویو یک داشبورد پیشرفته‌تر با کارت‌های اطلاعاتی جدید و خلاصه‌ای از تحلیل‌ها ارائه می‌دهد.
-    """
-    user = request.user
-    end_date_str = request.GET.get('end_date', timezone.now().strftime('%Y-%m-%d'))
-    start_date_str = request.GET.get('start_date', (timezone.now() - timedelta(days=29)).strftime('%Y-%m-%d'))
-
-    try:
-        end_date = timezone.make_aware(
-            datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59))
-        start_date = timezone.make_aware(datetime.strptime(start_date_str, '%Y-%m-%d'))
-    except (ValueError, TypeError):
-        end_date = timezone.now()
-        start_date = end_date - timedelta(days=29)
-
-    products = Product.objects.filter(owner=user)
-    all_events = ProductEvent.objects.filter(product__in=products, created_at__range=(start_date, end_date))
-    total_purchases = all_events.filter(event_type='PURCHASE').count()
-    total_revenue = all_events.filter(event_type='PURCHASE').aggregate(
-        total=Sum('product__price')
-    )['total'] or Decimal('0.00')
-
-    total_categories = products.values('category').distinct().count()
-    low_stock_products_count = products.filter(stock__lt=10, stock__gt=0).count()
-    out_of_stock_products_count = products.filter(stock=0).count()
-
-    context = {
-        'total_revenue': f"{total_revenue:.2f}",
-        'total_purchases': total_purchases,
-        'total_categories': total_categories,
-        'low_stock_products_count': low_stock_products_count,
-        'out_of_stock_products_count': out_of_stock_products_count,
-        'product_count': products.count(),
-        'start_date_str': start_date.strftime('%Y-%m-%d'),
-        'end_date_str': end_date.strftime('%Y-%m-%d'),
-        'is_custom_date_range': 'start_date' in request.GET,
-    }
-    return render(request, 'advanced_dashboard.html', context)
 
 
 # بخش جدید: تحلیل دسته‌بندی‌ها و پیش‌بینی فروش

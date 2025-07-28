@@ -24,8 +24,6 @@ urlpatterns = [
     path('product/<int:pk>/report-pdf/', views.product_report_pdf, name='product_report_pdf'),
     path('logout/', views.logout, name='logout'),
 
-    # URL برای داشبورد پیشرفته
-    path('advanced-dashboard/', views.advanced_dashboard_view, name='advanced_dashboard'),
 
     # URL برای صفحه تحلیل دسته‌بندی‌ها
     path('analysis/categories/', views.category_analysis_view, name='category_analysis'),
@@ -41,4 +39,5 @@ urlpatterns = [
 
     # URL برای API نمودار فروش روزانه (برای استفاده در داشبورد پیشرفته)
     path('api/charts/daily-sales/', views.daily_sales_chart_api, name='daily_sales_chart_api'),
+    path('api/daily-events-chart/', views.daily_events_chart_api, name='daily_events_chart_api'),
 ]
