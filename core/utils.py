@@ -1,5 +1,4 @@
 from statistics import LinearRegression
-
 import pandas as pd
 from mlxtend.frequent_patterns import apriori, association_rules
 from sklearn.linear_model import LinearRegression
@@ -394,7 +393,8 @@ def get_market_basket_analysis(user):
     try:
         basket = df.groupby(['user_ip', 'created_at__date', 'product__name'])[
             'product__name'].count().unstack().reset_index().fillna(0).set_index(['user_ip', 'created_at__date'])
-        basket_sets = basket.applymap(lambda x: x > 0)
+        # استفاده از DataFrame.map به جای applymap
+        basket_sets = basket.map(lambda x: x > 0)
 
         frequent_itemsets = apriori(basket_sets, min_support=0.01, use_colnames=True)
         if frequent_itemsets.empty:

@@ -36,7 +36,7 @@ import numpy as np
 from .forms import OTPRequestForm, OTPVerifyForm
 from .models import OTPCode, ApiKey, Product, ProductEvent, Recommendation, \
     UserSite  # توجه: ممکن است نیاز به افزودن مدل Webhook داشته باشید
-from .utils import update_recommendations, fetch_product_data, predict_cart_abandonment
+from .utils import update_recommendations, fetch_product_data, predict_cart_abandonment, generate_ai_recommendations
 import logging
 import random
 from django.http import JsonResponse, HttpResponse
