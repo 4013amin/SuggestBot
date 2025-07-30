@@ -21,10 +21,9 @@ class Category(models.Model):
         return self.name
 
 
-
 class Customer(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='customers', null=True)
-    identifier = models.CharField(max_length=255, help_text="شناسه مشتری (IP یا شناسه از سایت شما)" , null=True)
+    identifier = models.CharField(max_length=255, help_text="شناسه مشتری (IP یا شناسه از سایت شما)", null=True)
     email = models.EmailField(null=True, blank=True)
     name = models.CharField(max_length=255, null=True, blank=True)
     first_seen = models.DateTimeField(auto_now_add=True)
@@ -77,7 +76,6 @@ class ProductEvent(models.Model):
 
     def __str__(self):
         return f"{self.get_event_type_display()} for {self.product.name if self.product else 'Unknown'} by {self.customer.identifier if self.customer else 'Unknown'}"
-
 
 
 class Recommendation(models.Model):
