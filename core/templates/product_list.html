@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% load jalali_tags %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">لیست محصولات</h1>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">محصولات فروشگاه شما</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" width="100%" cellspacing="0">
+                    <thead>
+                    <tr>
+                        <th>نام محصول</th>
+                        <th>دسته‌بندی</th>
+                        <th>قیمت (تومان)</th>
+                        <th>موجودی</th>
+                        <th>تاریخ افزودن</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for product in products %}
+                    <tr>
+                        <td>
+                            {# این لینک کلیدی است #}
+                            <a href="{% url 'core:product_detail' product.pk %}">{{ product.name }}</a>
+                        </td>
+                        <td>{{ product.category }}</td>
+                        <td>{{ product.price|floatformat:0 }}</td>
+                        <td>{{ product.stock }}</td>
+                        <td>{{ product.created_at|to_jalali }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center">هنوز محصولی اضافه نکرده‌اید.</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

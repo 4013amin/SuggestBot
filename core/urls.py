@@ -4,40 +4,35 @@ from . import views
 app_name = 'core'
 
 urlpatterns = [
-    path('dahsboard/', views.dashboard_overview_view, name='dashboard_overview'),
-    path('', views.request_otp_view, name='request_otp'),
-    path('verify-otp/', views.verify_otp_view, name='verify_otp'),
-    path('connect-site/', views.connect_site_view, name='connect_site'),
-    path('product/<int:pk>/', views.product_detail_view, name='product_detail'),
-    path('product/<int:pk>/request-ai-recommendation/', views.request_ai_recommendation,
-         name='request_ai_recommendation'),
-    path('product/<int:pk>/abandonment/', views.product_abandonment_view, name='product_abandonment'),
+    # Auth
+    path('login/', views.request_otp_view, name='request_otp'),
+    path('verify/', views.verify_otp_view, name='verify_otp'),
+    path('logout/', views.logout_view, name='logout'),
 
-    # تحلیل رقبا
-    path('product/<int:pk>/competitor-comparison/', views.competitor_comparison_view, name='competitor_comparison'),
+    # Dashboard & Main
+    path('', views.dashboard_overview_view, name='dashboard_overview'),
 
-    path('product/<int:pk>/ai-chat/', views.ai_chat_recommendation, name='ai_chat_recommendation'),  # اضافه شده
+    # Configuration
+    path('connect/', views.connect_site_view, name='connect_site'),
 
-    path('tracking-script.js', views.tracking_script_view, name='tracking_script'),
+    path('products/', views.product_list_view, name='product_list'),
+    path('products/<int:pk>/', views.product_detail_view, name='product_detail'),
+
+    # Customer Analytics
+    path('customers/<str:identifier>/', views.customer_profile_view, name='customer_profile'),
+
+    # Advanced Analytics
+    path('analytics/cohort/', views.cohort_analysis_view, name='cohort_analysis'),
+
+    # A/B Testing
+    path('ab-testing/', views.ab_test_list_view, name='ab_test_list'),
+    path('ab-testing/new/', views.ab_test_create_view, name='ab_test_create'),
+    path('ab-testing/<int:pk>/', views.ab_test_detail_view, name='ab_test_detail'),
+
+    # API Endpoints
     path('api/track-event/', views.track_event_view, name='track_event'),
+    path('api/get-variant/', views.get_product_variant_api, name='get_product_variant'),
 
-    path('product/<int:pk>/report-pdf/', views.product_report_pdf, name='product_report_pdf'),
-    path('logout/', views.logout, name='logout'),
-
-
-    # URL برای صفحه تحلیل دسته‌بندی‌ها
-    path('analysis/categories/', views.category_analysis_view, name='category_analysis'),
-
-    # URL برای نمایش و مرتب‌سازی لیست محصولات
-    path('products/', views.product_list_sorted_view, name='product_list_sorted'),
-
-    # URL برای مرکز اعلان‌ها
-    path('notifications/', views.notifications_view, name='notifications'),
-
-    # URL برای دانلود گزارش فروش در قالب CSV
-    path('reports/sales/download/csv/', views.download_sales_report_csv, name='download_sales_report_csv'),
-
-    # URL برای API نمودار فروش روزانه (برای استفاده در داشبورد پیشرفته)
-    path('api/charts/daily-sales/', views.daily_sales_chart_api, name='daily_sales_chart_api'),
+    # این مسیر جدید را اضافه کنید
     path('api/daily-events-chart/', views.daily_events_chart_api, name='daily_events_chart_api'),
 ]

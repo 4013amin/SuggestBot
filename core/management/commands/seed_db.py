@@ -7,7 +7,7 @@ from faker import Faker
 from decimal import Decimal
 from django.utils import timezone
 from datetime import timedelta, datetime
-from core.models import Product, ProductEvent, Recommendation, Category
+from core.models import Product, Customer, ProductEvent, Recommendation  # مدل Customer اضافه شد
 
 
 class Command(BaseCommand):
@@ -19,116 +19,118 @@ class Command(BaseCommand):
         faker = Faker('fa_IR')
 
         # --- ۱) آماده‌سازی ---
+        # کاربر تستی که با آن وارد سیستم می‌شوید
         user, _ = User.objects.get_or_create(username='09120000000', defaults={'email': 'testuser@example.com'})
         self.stdout.write(self.style.WARNING(f'🎯 داده‌ها برای کاربر "{user.username}" ساخته می‌شوند.'))
 
+        # پاک کردن داده‌های قبلی برای این کاربر
         ProductEvent.objects.filter(product__owner=user).delete()
         Recommendation.objects.filter(owner=user).delete()
         Product.objects.filter(owner=user).delete()
-        Category.objects.filter(owner=user).delete()
+        Customer.objects.filter(owner=user).delete()  # مدل جدید مشتریان هم پاک می‌شود
 
-        # --- ۲) دسته‌بندی‌ها ---
-        categories = {}
-        for name in ['کالای دیجیتال', 'لوازم خانگی', 'مد و پوشاک', 'ورزش و سفر', 'کتاب و لوازم تحریر']:
-            categories[name] = Category.objects.create(owner=user, name=name)
-
-        # --- ۳) محصولات با سناریو ---
+        # --- ۲) محصولات با سناریو ---
+        # دیگر به مدل Category نیازی نیست چون در مدل Product به CharField تبدیل شده
         product_scenarios = [
-            {'name': 'گوشی هوشمند پرچمدار P50 Pro', 'views': 950, 'conv': 0.15, 'buy': 0.7, 'stock': 50, 'category': 'کالای دیجیتال'},
-            {'name': 'لپتاپ گیمینگ Legion X', 'views': 700, 'conv': 0.12, 'buy': 0.6, 'stock': 20, 'category': 'کالای دیجیتال'},
-            {'name': 'کفش ورزشی نایکی ایرمکس', 'views': 1200, 'conv': 0.02, 'buy': 0.5, 'stock': 100, 'category': 'مد و پوشاک'},
-            {'name': 'ساعت هوشمند گلکسی واچ ۶', 'views': 800, 'conv': 0.18, 'buy': 0.8, 'stock': 8, 'category': 'کالای دیجیتال'},
-            {'name': 'قهوه‌ساز دلونگی', 'views': 250, 'conv': 0.08, 'buy': 0.4, 'stock': 30, 'category': 'لوازم خانگی'},
-            {'name': 'کتاب فلسفه هنر', 'views': 80, 'conv': 0.05, 'buy': 0.9, 'stock': 50, 'category': 'کتاب و لوازم تحریر'},
+            {'name': 'گوشی هوشمند پرچمدار P50 Pro', 'views': 950, 'conv': 0.15, 'buy': 0.7, 'stock': 50,
+             'category': 'کالای دیجیتال', 'price': 35_000_000},
+            {'name': 'لپتاپ گیمینگ Legion X', 'views': 700, 'conv': 0.12, 'buy': 0.6, 'stock': 20,
+             'category': 'کالای دیجیتال', 'price': 55_000_000},
+            {'name': 'کفش ورزشی نایکی ایرمکس', 'views': 1200, 'conv': 0.02, 'buy': 0.5, 'stock': 100,
+             'category': 'مد و پوشاک', 'price': 4_500_000},
+            {'name': 'ساعت هوشمند گلکسی واچ ۶', 'views': 800, 'conv': 0.18, 'buy': 0.8, 'stock': 8,
+             'category': 'کالای دیجیتال', 'price': 9_800_000},
+            {'name': 'قهوه‌ساز دلونگی', 'views': 250, 'conv': 0.08, 'buy': 0.4, 'stock': 30, 'category': 'لوازم خانگی',
+             'price': 7_200_000},
+            {'name': 'کتاب فلسفه هنر', 'views': 80, 'conv': 0.05, 'buy': 0.9, 'stock': 50,
+             'category': 'کتاب و لوازم تحریر', 'price': 250_000},
         ]
 
         products = []
         for i, p in enumerate(product_scenarios):
             prod = Product.objects.create(
                 owner=user,
+                product_id_from_site=f'prod-{i + 100}',
                 name=p['name'],
-                price=Decimal(random.randint(3, 20)) * 1_000_000,
+                price=Decimal(p['price']),
                 stock=p['stock'],
                 page_url=f'https://shop.com/product/{faker.slug()}-{i}',
-                image_url=f'https://picsum.photos/seed/{i}/400/300',
-                category=categories[p['category']]
+                category=p['category']  # <<<<==== تغییر کلیدی ۱: استفاده از متن ساده به جای آبجکت
             )
             products.append({'product': prod, 'scenario': p})
 
-        # --- ۴) رویدادها ---
-        self.stdout.write('📊 در حال ساخت رویدادهای بازدید، سبد خرید، خرید و تحلیل‌های ویژه...')
+        # --- ۳) رویدادها ---
+        self.stdout.write('📊 در حال ساخت رویدادها...')
         today = timezone.now().date()
-        loyal_users = ['192.168.1.100', '192.168.1.101']  # کاربران وفادار (آی‌پی ثابت)
-        high_value_users = ['10.0.0.200']  # کاربران پرارزش (خرید زیاد)
+
+        # شناسه‌های مشتریان برای سناریوهای مختلف
+        loyal_customers_ids = ['customer-loyal-1', 'customer-loyal-2']
+        high_value_customer_ids = ['customer-vip-1']
+        all_special_ids = loyal_customers_ids + high_value_customer_ids
 
         for item in products:
             product = item['product']
             s = item['scenario']
 
-            # بازدید
-            for _ in range(random.randint(s['views'] - 50, s['views'] + 50)):
-                ip = random.choice(loyal_users + high_value_users + [faker.ipv4()])
+            # ایجاد رویدادها با استفاده از مدل Customer
+            for _ in range(s['views']):
+                # انتخاب یک شناسه مشتری به صورت تصادفی
+                customer_id = random.choice(all_special_ids + [f'random-user-{random.randint(1, 1000)}'])
+                # <<<<==== تغییر کلیدی ۲: ساخت یا گرفتن مشتری به جای IP
+                customer, _ = Customer.objects.get_or_create(owner=user, identifier=customer_id)
                 ProductEvent.objects.create(
-                    product=product, event_type=ProductEvent.EventType.VIEW,
+                    product=product,
+                    customer=customer,  # اختصاص آبجکت مشتری
+                    event_type=ProductEvent.EventType.VIEW,
                     created_at=faker.date_time_between('-60d', 'now', tzinfo=timezone.get_current_timezone()),
-                    user_ip=ip
                 )
 
-            # افزودن به سبد
             add_count = int(s['views'] * s['conv'])
             for _ in range(add_count):
-                ProductEvent.objects.create(
-                    product=product, event_type=ProductEvent.EventType.ADD_TO_CART,
-                    created_at=faker.date_time_between('-30d', 'now', tzinfo=timezone.get_current_timezone()),
-                    user_ip=faker.ipv4()
-                )
+                customer, _ = Customer.objects.get_or_create(owner=user,
+                                                             identifier=f'random-user-{random.randint(1, 1000)}')
+                ProductEvent.objects.create(product=product, customer=customer,
+                                            event_type=ProductEvent.EventType.ADD_TO_CART)
 
-            # خرید
             buy_count = int(add_count * s['buy'])
             for _ in range(buy_count):
-                ip = random.choice(high_value_users + [faker.ipv4()])
-                ProductEvent.objects.create(
-                    product=product, event_type=ProductEvent.EventType.PURCHASE,
-                    created_at=faker.date_time_between('-30d', 'now', tzinfo=timezone.get_current_timezone()),
-                    user_ip=ip
-                )
+                customer_id = random.choice(high_value_customer_ids + [f'random-user-{random.randint(1, 1000)}'])
+                customer, _ = Customer.objects.get_or_create(owner=user, identifier=customer_id)
+                ProductEvent.objects.create(product=product, customer=customer,
+                                            event_type=ProductEvent.EventType.PURCHASE)
 
-        # --- ۵) پیش‌بینی فروش: ساخت خریدهای یکنواخت در ۳۰ روز اخیر ---
-        for days_ago in range(30):
+        # --- ۴) پیش‌بینی فروش ---
+        top_product = Product.objects.get(name__contains='لپتاپ')
+        for days_ago in range(60):
             date_of_purchase = today - timedelta(days=days_ago)
-            for _ in range(random.randint(1, 3)):
-                prod = random.choice(products)['product']
+            for _ in range(random.randint(0, 5)):
+                customer, _ = Customer.objects.get_or_create(owner=user,
+                                                             identifier=f'random-user-{random.randint(1, 1000)}')
                 ProductEvent.objects.create(
-                    product=prod, event_type=ProductEvent.EventType.PURCHASE,
-                    created_at=timezone.make_aware(datetime.combine(date_of_purchase, datetime.min.time())),
-                    user_ip=faker.ipv4()
+                    product=top_product, customer=customer, event_type=ProductEvent.EventType.PURCHASE,
+                    created_at=timezone.make_aware(datetime.combine(date_of_purchase, datetime.min.time()))
                 )
 
-        # --- ۶) تحلیل سبد خرید: خرید هم‌زمان دو محصول ---
-        for _ in range(20):
-            pair = random.sample(products, 2)
+        # --- ۵) تحلیل سبد خرید ---
+        pair_to_buy = [Product.objects.get(name__contains='گوشی'), Product.objects.get(name__contains='ساعت')]
+        for _ in range(25):
+            customer_id = f'basket-user-{random.randint(1, 50)}'
+            customer, _ = Customer.objects.get_or_create(owner=user, identifier=customer_id)
             timestamp = faker.date_time_between('-15d', 'now', tzinfo=timezone.get_current_timezone())
-            for p in pair:
-                ProductEvent.objects.create(
-                    product=p['product'], event_type=ProductEvent.EventType.PURCHASE,
-                    created_at=timestamp,
-                    user_ip=faker.ipv4()
-                )
+            ProductEvent.objects.create(product=pair_to_buy[0], customer=customer,
+                                        event_type=ProductEvent.EventType.PURCHASE, created_at=timestamp)
+            ProductEvent.objects.create(product=pair_to_buy[1], customer=customer,
+                                        event_type=ProductEvent.EventType.PURCHASE, created_at=timestamp)
 
-        # --- ۷) پیشنهادهای هوشمند ---
-        attention = Product.objects.get(name__contains='کفش')
-        Recommendation.objects.create(
-            owner=user, product=attention, reason='HIGH_VIEW_LOW_ADD',
-            text='بازدید زیاد ولی سبد خرید کم؛ شاید قیمت یا سایز دلیل باشد.',
-            confidence_score=0.85, is_active=True
-        )
+        # --- ۶) پیشنهادهای هوشمند ---
+        attention_product = Product.objects.get(name__contains='کفش')
+        Recommendation.objects.create(owner=user, product=attention_product, reason='HIGH_VIEW_LOW_ADD',
+                                      text='کفش ورزشی نایکی بازدید زیادی دارد اما به سبد خرید اضافه نمی‌شود. قیمت‌گذاری یا تصاویر محصول را بررسی کنید.',
+                                      confidence_score=0.85)
 
-        low_stock = Product.objects.get(name__contains='ساعت')
-        Recommendation.objects.create(
-            owner=user, product=low_stock, reason='LOW_STOCK',
-            text='موجودی ساعت کمتر از ۱۰ عدد؛ شارژ فوری برای جلوگیری از اتمام موجودی.',
-            confidence_score=0.98, is_active=True
-        )
+        low_stock_product = Product.objects.get(name__contains='ساعت')
+        Recommendation.objects.create(owner=user, product=low_stock_product, reason='LOW_STOCK',
+                                      text='موجودی ساعت هوشمند رو به اتمام است. برای جلوگیری از توقف فروش، سریعاً آن را شارژ کنید.',
+                                      confidence_score=0.98)
 
-        self.stdout.write(self.style.SUCCESS('✅ همه داده‌ها ساخته شد! حالا داشبوردت پر و آماده است 🔥'))
-
+        self.stdout.write(self.style.SUCCESS('✅ همه داده‌ها با موفقیت ساخته شد! داشبورد شما اکنون آماده نمایش است 🔥'))

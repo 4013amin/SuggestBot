@@ -54,9 +54,9 @@
                     <h6 class="small">بازدید<span class="float-end text-muted">{{ funnel_data.views }} کاربر</span></h6>
                     <div class="progress mb-3" style="height: 20px;"><div class="progress-bar bg-primary" style="width: 100%">100%</div></div>
                     <h6 class="small">افزودن به سبد<span class="float-end text-muted">{{ funnel_data.carts }} کاربر</span></h6>
-                    <div class="progress mb-3" style="height: 20px;"><div class="progress-bar bg-success" style="width: {{ funnel_data.view_to_cart_rate }}%">{{ funnel_data.view_to_cart_rate|floatformat:1 }}%</div></div>
+                    <div class="progress mb-3" style="height: 20px;"><div class="progress-bar bg-success" style="width: {{ funnel_data.view_to_cart_rate|floatformat:1 }}%">{{ funnel_data.view_to_cart_rate|floatformat:1 }}%</div></div>
                     <h6 class="small">خرید نهایی<span class="float-end text-muted">{{ funnel_data.purchases }} کاربر</span></h6>
-                    <div class="progress" style="height: 20px;"><div class="progress-bar bg-danger" style="width: {{ funnel_data.overall_conversion_rate }}%">{{ funnel_data.overall_conversion_rate|floatformat:1 }}%</div></div>
+                    <div class="progress" style="height: 20px;"><div class="progress-bar bg-danger" style="width: {{ funnel_data.overall_conversion_rate|floatformat:1 }}%">{{ funnel_data.overall_conversion_rate|floatformat:1 }}%</div></div>
                 </div>
             </div>
         </div>
@@ -68,9 +68,9 @@
             <div class="card">
                 <div class="card-header">تحلیل سبد خرید (چه محصولاتی با هم خریداری می‌شوند؟)</div>
                 <div class="card-body p-4">
-                    {% if market_basket_rules is not None and not market_basket_rules.empty %}
+                    {% if market_basket_rules %}
                         <ul class="list-group list-group-flush">
-                        {% for index, row in market_basket_rules.iterrows %}
+                        {% for row in market_basket_rules %}
                             <li class="list-group-item"><i class="fas fa-shopping-basket text-primary me-2"></i>اگر مشتری <b>{{ row.antecedents }}</b> را بخرد، به احتمال <b>{{ row.confidence|floatformat:0 }}%</b>، محصول <b>{{ row.consequents }}</b> را نیز خواهد خرید.</li>
                         {% endfor %}
                         </ul>
@@ -82,9 +82,9 @@
             <div class="card">
                 <div class="card-header">بخش‌بندی مشتریان</div>
                 <div class="card-body p-4">
-                    <p class="mb-2"><strong><i class="fas fa-gem text-success me-2"></i>مشتریان باارزش:</strong> {% for ip in customer_segments.high_value %}<span class="badge bg-light text-dark m-1">{{ ip }}</span>{% empty %}یافت نشد.{% endfor %}</p>
-                    <p class="mb-2"><strong><i class="fas fa-star text-warning me-2"></i>مشتریان وفادار:</strong> {% for ip in customer_segments.loyal %}<span class="badge bg-light text-dark m-1">{{ ip }}</span>{% empty %}یافت نشد.{% endfor %}</p>
-                    <p class="mb-0"><strong><i class="fas fa-eye text-info me-2"></i>خریداران پنجره‌ای:</strong> {% for ip in customer_segments.window_shoppers %}<span class="badge bg-light text-dark m-1">{{ ip }}</span>{% empty %}یافت نشد.{% endfor %}</p>
+                    <p class="mb-2"><strong><i class="fas fa-gem text-success me-2"></i>مشتریان باارزش:</strong> {% for item in customer_segments.high_value %}<span class="badge bg-light text-dark m-1">{{ item.customer__identifier }}</span>{% empty %}یافت نشد.{% endfor %}</p>
+                    <p class="mb-2"><strong><i class="fas fa-star text-warning me-2"></i>مشتریان وفادار:</strong> {% for item in customer_segments.loyal %}<span class="badge bg-light text-dark m-1">{{ item.customer__identifier }}</span>{% empty %}یافت نشد.{% endfor %}</p>
+                    <p class="mb-0"><strong><i class="fas fa-eye text-info me-2"></i>خریداران پنجره‌ای:</strong> {% for item in customer_segments.window_shoppers %}<span class="badge bg-light text-dark m-1">{{ item.customer__identifier }}</span>{% empty %}یافت نشد.{% endfor %}</p>
                 </div>
             </div>
         </div>
@@ -112,11 +112,11 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const ctx = document.getElementById('overviewChart').getContext('2d');
-    let overviewChart; // متغیر نمودار را در سطح بالاتر تعریف می‌کنیم
+    let overviewChart;
 
     function renderChart(chartData) {
         if (overviewChart) {
-            overviewChart.destroy(); // نمودار قبلی را از بین می‌بریم تا تداخل نکند
+            overviewChart.destroy();
         }
         overviewChart = new Chart(ctx, {
             type: 'line',
@@ -135,22 +135,28 @@ document.addEventListener('DOMContentLoaded', function () {
     function fetchChartData() {
         const startDate = document.querySelector('input[name="start_date"]').value;
         const endDate = document.querySelector('input[name="end_date"]').value;
-        // آدرس URL برای API باید به درستی تنظیم شود
-        const url = `/api/daily-events-chart/?start_date=${startDate}&end_date=${endDate}`;
+        // از تگ url جنگو برای ساختن آدرس داینامیک استفاده می‌کنیم
+        const url = `{% url 'core:daily_events_chart_api' %}?start_date=${startDate}&end_date=${endDate}`;
 
         fetch(url)
             .then(response => {
-                if (!response.ok) throw new Error('Network response was not ok');
+                if (!response.ok) throw new Error('پاسخ شبکه ناموفق بود');
                 return response.json();
             })
             .then(data => {
                 renderChart(data);
             })
-            .catch(error => console.error('Error fetching chart data:', error));
+            .catch(error => console.error('خطا در دریافت داده‌های نمودار:', error));
     }
 
-    // در اولین بارگذاری صفحه، داده‌های نمودار را دریافت می‌کنیم
+    // فراخوانی تابع در زمان بارگذاری صفحه
     fetchChartData();
+
+    // اگر فرم فیلتر تاریخ تغییر کرد، دوباره داده‌ها را واکشی کن
+    document.getElementById('date-filter-form').addEventListener('submit', function(e) {
+        e.preventDefault(); // جلوگیری از رفرش کامل صفحه
+        fetchChartData();
+    });
 });
 </script>
 </body>

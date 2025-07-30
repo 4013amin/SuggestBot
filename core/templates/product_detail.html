@@ -1,305 +1,123 @@
-<!DOCTYPE html>
-<html lang="fa" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>جزئیات محصول: {{ product.name }}</title>
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Vazir Font -->
-    <link href="https://cdn.fontcdn.ir/Font/Persian/Vazir/Vazir.css" rel="stylesheet">
-    <style>
-        body {
-            background-color: #f8f9fa;
-            font-family: 'Vazir', sans-serif;
-        }
-        .card {
-            border-radius: 15px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        }
-        .card-header {
-            background-color: #007bff;
-            color: white;
-            border-radius: 15px 15px 0 0;
-        }
-        .stats-box {
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        .list-group-item {
-            border: none;
-            padding: 15px;
-            background-color: #fff;
-            margin-bottom: 10px;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
-        .btn-primary, .btn-secondary, .btn-success, .btn-info {
-            border-radius: 10px;
-        }
-        .product-image {
-            max-width: 200px;
-            border-radius: 10px;
-        }
-        #ai-loading {
-            display: none;
-            color: #007bff;
-        }
-        #chat-response {
-            margin-top: 10px;
-        }
-        @media (max-width: 768px) {
-            .stats-box {
-                margin-bottom: 20px;
-            }
-        }
-    </style>
-</head>
-<body>
+{# templates/products/product_detail.html #}
+
+{% extends "base.html" %}
+{% load jalali_tags %}
+
+{% block content %}
 <div class="container py-5">
-    <h1 class="text-center mb-4">جزئیات محصول: {{ product.name }}</h1>
+    <h1 class="h3 mb-4 text-gray-800">تحلیل جامع محصول: <strong>{{ product.name }}</strong></h1>
 
-    <!-- اطلاعات محصول -->
-    <div class="card mb-4">
-        <div class="card-body text-center">
-            {% if product.image_url %}
-            <img src="{{ product.image_url }}" alt="{{ product.name }}" class="product-image mb-3">
-            {% endif %}
-            <h4>{{ product.name }}</h4>
-            <p class="text-muted">دسته‌بندی: {{ product.category|default:"نامشخص" }}</p>
-            <p>قیمت: {{ product.price|default:"نامشخص" }} تومان</p>
-            <p>موجودی: {{ product.stock|default:"نامشخص" }}</p>
-            <p>تخفیف: {{ product.discount|default:"0" }}%</p>
-        </div>
+    <!-- کارت‌های آمار کلیدی (۳۰ روز گذشته) -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="stats-box"><h5>بازدید</h5><p class="fs-3 text-primary mb-0">{{ views_30_days }}</p></div></div>
+        <div class="col-md-3"><div class="stats-box"><h5>افزودن به سبد</h5><p class="fs-3 text-success mb-0">{{ carts_30_days }}</p></div></div>
+        <div class="col-md-3"><div class="stats-box"><h5>خرید نهایی</h5><p class="fs-3 text-danger mb-0">{{ purchases_30_days }}</p></div></div>
+        <div class="col-md-3"><div class="stats-box"><h5>نرخ تبدیل (خرید)</h5><p class="fs-3 text-info mb-0">{{ view_to_purchase_rate }}%</p></div></div>
     </div>
 
-    <!-- آمار محصول -->
-    <h2 class="mb-3">آمار 30 روز گذشته</h2>
+    <!-- نمودار و نرخ‌های تبدیل -->
     <div class="row g-4 mb-4">
-        <div class="col-md-3 col-sm-6">
-            <div class="stats-box">
-                <h5>بازدید</h5>
-                <p class="fs-3 text-primary">{{ views_30_days }}</p>
+        <div class="col-lg-8">
+            <div class="card h-100">
+                <div class="card-header">روند عملکرد در ۷ روز گذشته</div>
+                <div class="card-body p-4"><canvas id="productChart"></canvas></div>
             </div>
         </div>
-        <div class="col-md-3 col-sm-6">
-            <div class="stats-box">
-                <h5>افزودن به سبد</h5>
-                <p class="fs-3 text-success">{{ carts_30_days }}</p>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6">
-            <div class="stats-box">
-                <h5>خرید نهایی</h5>
-                <p class="fs-3 text-danger">{{ purchases_30_days }}</p>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6">
-            <div class="stats-box">
-                <h5>نرخ تبدیل</h5>
-                <p class="fs-3 text-info">{{ conversion_rate }}%</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- نمودار روند -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="mb-0">روند فعالیت محصول</h5>
-        </div>
-        <div class="card-body">
-            <canvas id="productChart" height="100"></canvas>
-        </div>
-    </div>
-
-    <!-- پیشنهادات -->
-    <h2 class="mb-3">پیشنهادات برای افزایش فروش</h2>
-    <div class="card mb-4">
-        <div class="card-body">
-            <button id="request-ai-btn" class="btn btn-success mb-3">درخواست پیشنهاد از هوش مصنوعی</button>
-            <a href="{% url 'core:product_abandonment' product.id %}" class="btn btn-info mb-3">تحلیل ترک سبد خرید</a>
-            <a href="{% url 'core:competitor_comparison' product.id %}" class="btn btn-info mb-3">مقایسه با رقبا</a>
-            <a href="{% url 'core:product_report_pdf' product.id %}" class="btn btn-primary mt-3">دانلود گزارش PDF</a>
-            <span id="ai-loading">در حال دریافت پیشنهادات...</span>
-            <ul id="recommendations-list" class="list-group">
-                {% for rec in recommendations %}
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    {{ rec.text }}
-                    <div>
-                        {% if rec.confidence_score %}
-                        <span class="badge bg-primary rounded-pill">امتیاز: {{ rec.confidence_score }}</span>
-                        {% endif %}
-                        {% if rec.reason == 'AI_GENERATED' %}
-                        <span class="badge bg-success rounded-pill">هوش مصنوعی</span>
-                        {% elif rec.reason == 'DYNAMIC_PRICING' %}
-                        <span class="badge bg-warning rounded-pill">پیشنهاد قیمت</span>
-                        {% else %}
-                        <span class="badge bg-info rounded-pill">تحلیل سیستم</span>
-                        {% endif %}
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">نرخ‌های تبدیل</div>
+                <div class="card-body p-4 d-flex flex-column justify-content-center">
+                    <h6 class="small">نرخ تبدیل بازدید به سبد خرید</h6>
+                    <div class="progress mb-4" style="height: 25px;">
+                        <div class="progress-bar bg-success" style="width: {{ view_to_cart_rate }}%">{{ view_to_cart_rate }}%</div>
                     </div>
-                </li>
-                {% empty %}
-                <li class="list-group-item text-center">پیشنهادی موجود نیست</li>
-                {% endfor %}
-            </ul>
-        </div>
-    </div>
-
-    <!-- چت با هوش مصنوعی -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="mb-0">چت با هوش مصنوعی</h5>
-        </div>
-        <div class="card-body">
-            <div class="mb-3">
-                <input type="text" id="chat-question" class="form-control"
-                       placeholder="سوال خود را بپرسید (مثلاً: چطور فروش این محصول را افزایش دهم؟)">
-                <button id="chat-submit" class="btn btn-success mt-2">ارسال سوال</button>
+                    <h6 class="small">نرخ تبدیل بازدید به خرید</h6>
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar bg-info" style="width: {{ view_to_purchase_rate }}%">{{ view_to_purchase_rate }}%</div>
+                    </div>
+                </div>
             </div>
-            <div id="chat-response" class="alert alert-info" style="display: none;"></div>
+        </div>
+    </div>
+    
+    <!-- پیش‌بینی و پیشنهادات -->
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">پیش‌بینی فروش ۳۰ روز آینده</div>
+                <div class="card-body p-4">
+                    {% if sales_forecast %}
+                        <div class="table-responsive" style="max-height: 250px;">
+                            <table class="table table-sm table-borderless">
+                                {% for date, count in sales_forecast.items %}
+                                <tr>
+                                    <td>{{ date|to_jalali }}</td>
+                                    <td><span class="badge bg-light text-primary">پیش‌بینی: {{ count }} عدد فروش</span></td>
+                                </tr>
+                                {% endfor %}
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info mb-0">{{ forecast_message }}</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+             <div class="card">
+                <div class="card-header">پیشنهادات بهبود</div>
+                <div class="card-body p-4">
+                    <ul class="list-group list-group-flush">
+                    {% for rec in recommendations %}
+                        <li class="list-group-item">{{ rec.text }}</li>
+                    {% empty %}
+                        <li class="list-group-item text-center text-muted">پیشنهاد فعالی برای این محصول وجود ندارد.</li>
+                    {% endfor %}
+                    </ul>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- دکمه بازگشت -->
-    <a href="{% url 'core:dashboard_overview' %}" class="btn btn-secondary mt-4">بازگشت به داشبورد</a>
 </div>
 
-<!-- Bootstrap JS and Chart.js Script -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // نمودار روند
+document.addEventListener('DOMContentLoaded', function () {
     const ctx = document.getElementById('productChart').getContext('2d');
     new Chart(ctx, {
-        type: 'line',
+        type: 'bar', // نمودار میله‌ای برای مقایسه بهتر است
         data: {
             labels: {{ chart_labels|safe }},
             datasets: [
                 {
                     label: 'بازدید',
                     data: {{ chart_views|safe }},
-                    borderColor: '#007bff',
-                    fill: false,
-                    tension: 0.4
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
                 },
                 {
-                    label: 'افزودن به سبد',
+                    label: 'سبد خرید',
                     data: {{ chart_carts|safe }},
-                    borderColor: '#28a745',
-                    fill: false,
-                    tension: 0.4
+                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
                 },
                 {
                     label: 'خرید',
                     data: {{ chart_purchases|safe }},
-                    borderColor: '#dc3545',
-                    fill: false,
-                    tension: 0.4
+                    backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1
                 }
             ]
         },
         options: {
             responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: { display: true, text: 'تعداد' }
-                },
-                x: {
-                    title: { display: true, text: 'روز' }
-                }
-            },
-            plugins: {
-                legend: { position: 'top' }
-            }
+            maintainAspectRatio: false,
+            scales: { y: { beginAtZero: true } }
         }
     });
-
-    // درخواست پیشنهادات هوش مصنوعی
-    document.getElementById('request-ai-btn').addEventListener('click', function() {
-        const loading = document.getElementById('ai-loading');
-        const list = document.getElementById('recommendations-list');
-        loading.style.display = 'inline-block';
-        this.disabled = true;
-
-        fetch("{% url 'core:request_ai_recommendation' product.id %}", {
-            method: 'GET',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRFToken': '{{ csrf_token }}'
-
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            loading.style.display = 'none';
-            this.disabled = false;
-
-            // پاک کردن پیشنهادات قبلی هوش مصنوعی
-            list.querySelectorAll('.list-group-item').forEach(item => {
-                if (item.querySelector('.bg-success')) {
-                    item.remove();
-                }
-            });
-
-            // اضافه کردن پیشنهادات جدید
-            data.recommendations.forEach(rec => {
-                const li = document.createElement('li');
-                li.className = 'list-group-item d-flex justify-content-between align-items-center';
-                li.innerHTML = `
-                    ${rec.text}
-                    <div>
-                        <span class="badge bg-primary rounded-pill">امتیاز: ${rec.confidence_score}</span>
-                        <span class="badge bg-success rounded-pill">هوش مصنوعی</span>
-                    </div>
-                `;
-                list.prepend(li);
-            });
-
-            // اگر هیچ پیشنهادی نبود
-            if (!data.recommendations.length && !list.querySelector('.list-group-item')) {
-                list.innerHTML = '<li class="list-group-item text-center">پیشنهادی موجود نیست</li>';
-            }
-        })
-        .catch(error => {
-            loading.style.display = 'none';
-            this.disabled = false;
-            console.error('Error:', error);
-            alert('خطا در دریافت پیشنهادات. لطفاً دوباره تلاش کنید.');
-        });
-    });
-
-    // چت با هوش مصنوعی
-    document.getElementById('chat-submit').addEventListener('click', function() {
-        const question = document.getElementById('chat-question').value;
-        const responseDiv = document.getElementById('chat-response');
-        if (!question) {
-            responseDiv.textContent = 'لطفاً یک سوال وارد کنید.';
-            responseDiv.style.display = 'block';
-            return;
-        }
-        fetch("{% url 'core:ai_chat_recommendation' product.id %}", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token }}'
-            },
-            body: JSON.stringify({ question: question })
-        })
-        .then(response => response.json())
-        .then(data => {
-            responseDiv.textContent = data.answer || data.error;
-            responseDiv.style.display = 'block';
-        })
-        .catch(error => {
-            responseDiv.textContent = 'خطا در ارتباط با سرور.';
-            responseDiv.style.display = 'block';
-        });
-    });
+});
 </script>
-</body>
-</html>
+{% endblock %}
